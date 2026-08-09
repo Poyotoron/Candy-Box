@@ -1,0 +1,20 @@
+{
+    "name": "net.maaaaa.candy-box.blendshape-keeper.Editor",
+    "rootNamespace": "Poyo.CandyBox.BlendshapeKeeper.Editor",
+    "references": [
+        "net.maaaaa.candy-box.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "CANDY_BOX_TOOL_00"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
