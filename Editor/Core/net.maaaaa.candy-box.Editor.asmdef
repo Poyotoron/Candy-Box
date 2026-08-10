@@ -11,6 +11,12 @@
     "precompiledReferences": [],
     "autoReferenced": false,
     "defineConstraints": [],
-    "versionDefines": [],
+    "versionDefines": [
+        {
+            "name": "nadena.dev.modular-avatar",
+            "expression": "1.17.0",
+            "define": "CANDY_BOX_HAS_MA"
+        }
+    ],
     "noEngineReferences": false
 }
