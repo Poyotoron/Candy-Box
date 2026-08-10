@@ -1,7 +1,10 @@
 {
-    "name": "net.maaaaa.candy-box.Editor",
-    "rootNamespace": "Poyo.CandyBox.Editor",
-    "references": [],
+    "name": "net.maaaaa.candy-box.aao-merge-bone-helper.Editor",
+    "rootNamespace": "Poyo.CandyBox.AaoMergeBoneHelper.Editor",
+    "references": [
+        "net.maaaaa.candy-box.Editor",
+        "com.anatawa12.avatar-optimizer.runtime"
+    ],
     "includePlatforms": [
         "Editor"
     ],
@@ -10,13 +13,11 @@
     "overrideReferences": false,
     "precompiledReferences": [],
     "autoReferenced": false,
-    "defineConstraints": [],
+    "defineConstraints": [
+        "CANDY_BOX_TOOL_03",
+        "CANDY_BOX_HAS_AAO"
+    ],
     "versionDefines": [
-        {
-            "name": "nadena.dev.modular-avatar",
-            "expression": "1.17.0",
-            "define": "CANDY_BOX_HAS_MA"
-        },
         {
             "name": "com.anatawa12.avatar-optimizer",
             "expression": "1.9.0",

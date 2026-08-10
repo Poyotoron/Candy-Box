@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.0] - 2026-08-10
+
+### Added
+
+- Helper for AAO Merge Bone to manage bone merge settings from a hierarchy tree.
+- Chain thinning controls to select bones for merging at a fixed interval.
+
+## [0.3.0] - 2026-08-10
+
+### Added
+
+- Helper for AAO Merge PhysBone to compare source values and suggest override values from minimum, maximum, mean, median, or mode.
+- Curve-aware suggestions based on the effective value of each source PhysBone.
+
 ## [0.2.0] - 2026-08-10
 
 ### Added
