@@ -54,8 +54,17 @@ namespace Poyo.CandyBox.Editor
         private static readonly bool ModularAvatarAvailable = false;
 #endif
 
+#if CANDY_BOX_HAS_AAO
+        private static readonly bool AvatarOptimizerAvailable = true;
+#else
+        private static readonly bool AvatarOptimizerAvailable = false;
+#endif
+
         private const string ModularAvatarRequirement =
             "Modular Avatar 1.17.0 以降";
+
+        private const string AvatarOptimizerRequirement =
+            "AAO: Avatar Optimizer 1.9.0 以降";
 
         private static readonly string BlendshapeKeeperDescription =
             @"メッシュに設定したブレンドシェイプの現在値と、アニメーションのキー値を比べ、
@@ -66,6 +75,16 @@ namespace Poyo.CandyBox.Editor
             @"衣装のシェイプキーを素体のシェイプキーへ追従させる設定を、まとめて作ります。
 素体と同じ名前のシェイプキーを衣装側から探し、チェックを付けたものだけを
 MA Blendshape Sync の設定として書き込みます。名前が違うものは手動で紐付けられます。";
+
+        private static readonly string AaoMergePhysBoneHelperDescription =
+            @"複数の PhysBone を 1 つに統合するとき、値が食い違うプロパティを洗い出します。
+統合対象それぞれの値を一覧にし、最小・最大・平均・中央・最頻から選んだ値を
+AAO Merge PhysBone の override として書き込みます。カーブにも対応しています。";
+
+        private static readonly string AaoMergeBoneHelperDescription =
+            @"指定したオブジェクト配下のボーンをツリーで一覧し、
+どのボーンを親へ統合するかをチェックボックスでまとめて切り替えます。
+ボーンチェーンを一定間隔で間引く設定も自動で作れます。";
 
         internal static readonly CandyBoxToolEntry[] Tools =
         {
@@ -81,6 +100,20 @@ MA Blendshape Sync の設定として書き込みます。名前が違うもの�
                 MaBlendshapeSyncHelperDescription,
                 ModularAvatarRequirement,
                 ModularAvatarAvailable),
+            new CandyBoxToolEntry(
+                "02",
+                "02_Helper for AAO Merge PhysBone",
+                "統合する PhysBone の値を比べ、override する値を提案します",
+                AaoMergePhysBoneHelperDescription,
+                AvatarOptimizerRequirement,
+                AvatarOptimizerAvailable),
+            new CandyBoxToolEntry(
+                "03",
+                "03_Helper for AAO Merge Bone",
+                "ボーンを親へ統合する設定を、ツリーからまとめて切り替えます",
+                AaoMergeBoneHelperDescription,
+                AvatarOptimizerRequirement,
+                AvatarOptimizerAvailable),
         };
 
         internal static CandyBoxToolEntry Find(string id)
