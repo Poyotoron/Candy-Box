@@ -1,0 +1,28 @@
+{
+    "name": "net.maaaaa.candy-box.aao-merge-bone-helper.Editor",
+    "rootNamespace": "Poyo.CandyBox.AaoMergeBoneHelper.Editor",
+    "references": [
+        "net.maaaaa.candy-box.Editor",
+        "com.anatawa12.avatar-optimizer.runtime"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "CANDY_BOX_TOOL_03",
+        "CANDY_BOX_HAS_AAO"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.anatawa12.avatar-optimizer",
+            "expression": "1.9.0",
+            "define": "CANDY_BOX_HAS_AAO"
+        }
+    ],
+    "noEngineReferences": false
+}
