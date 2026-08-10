@@ -4,10 +4,17 @@ using UnityEngine;
 
 namespace Poyo.CandyBox.BlendshapeKeeper.Editor
 {
+    internal enum BlendshapeKeeperOutputMode
+    {
+        Overwrite = 0,
+        SaveAsCopy = 1,
+    }
+
     internal sealed class BlendshapeKeeperChange
     {
         internal EditorCurveBinding Binding;
         internal int KeyIndex;
+        internal float Time;
         internal float OldValue;
         internal float NewValue;
         internal string Label;

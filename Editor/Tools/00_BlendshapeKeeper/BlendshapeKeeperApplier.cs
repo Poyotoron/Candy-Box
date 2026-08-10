@@ -1,43 +1,128 @@
 using System.Collections.Generic;
+using System.IO;
 using UnityEditor;
 using UnityEngine;
 
 namespace Poyo.CandyBox.BlendshapeKeeper.Editor
 {
+    internal struct BlendshapeKeeperApplyResult
+    {
+        internal int ChangedKeys;
+        internal int ChangedClips;
+        internal string FirstOutputPath;
+        internal int RenamedCount;
+        internal int CreatedClips;
+    }
+
     internal static class BlendshapeKeeperApplier
     {
         private const string UndoName = "Blendshape Keeper";
 
-        internal static void Apply(
-            BlendshapeKeeperPlan plan, out int changedKeys, out int changedClips)
+        internal static BlendshapeKeeperApplyResult Apply(
+            BlendshapeKeeperPlan plan,
+            BlendshapeKeeperOutputMode outputMode,
+            string outputFolderPath,
+            string suffix,
+            bool copyWithoutChanges)
         {
-            changedKeys = 0;
-            changedClips = 0;
-            if (plan == null || plan.EnabledChangeCount == 0)
+            var result = new BlendshapeKeeperApplyResult();
+            if (plan == null ||
+                (plan.EnabledChangeCount == 0 &&
+                 !(outputMode == BlendshapeKeeperOutputMode.SaveAsCopy &&
+                   copyWithoutChanges)))
             {
-                return;
+                return result;
             }
 
             for (int clipIndex = 0; clipIndex < plan.Clips.Count; clipIndex++)
             {
-                ApplyClip(plan.Clips[clipIndex], ref changedKeys, ref changedClips);
+                BlendshapeKeeperClipPlan clipPlan = plan.Clips[clipIndex];
+                if (outputMode == BlendshapeKeeperOutputMode.SaveAsCopy)
+                {
+                    ApplyAsCopy(
+                        clipPlan,
+                        outputFolderPath,
+                        suffix,
+                        copyWithoutChanges,
+                        ref result);
+                }
+                else if (ApplyChangesToClip(
+                             clipPlan.Clip, clipPlan, true, ref result.ChangedKeys))
+                {
+                    EditorUtility.SetDirty(clipPlan.Clip);
+                    result.ChangedClips++;
+                }
             }
 
-            if (changedKeys > 0)
+            if (result.ChangedKeys > 0 || result.CreatedClips > 0)
             {
                 AssetDatabase.SaveAssets();
             }
+
+            return result;
         }
 
-        private static void ApplyClip(
+        private static void ApplyAsCopy(
             BlendshapeKeeperClipPlan clipPlan,
-            ref int changedKeys,
-            ref int changedClips)
+            string outputFolderPath,
+            string suffix,
+            bool copyWithoutChanges,
+            ref BlendshapeKeeperApplyResult result)
         {
-            AnimationClip clip = clipPlan.Clip;
-            if (clip == null)
+            if (clipPlan == null || clipPlan.Clip == null)
             {
                 return;
+            }
+
+            bool hasEnabledChange = false;
+            for (int changeIndex = 0; changeIndex < clipPlan.Changes.Count; changeIndex++)
+            {
+                if (clipPlan.Changes[changeIndex].Enabled)
+                {
+                    hasEnabledChange = true;
+                    break;
+                }
+            }
+
+            if (!hasEnabledChange && !copyWithoutChanges)
+            {
+                return;
+            }
+
+            AnimationClip copy = Object.Instantiate(clipPlan.Clip);
+            copy.name = clipPlan.Clip.name + SanitizeSuffix(suffix);
+            string desiredPath = outputFolderPath.TrimEnd('/') + "/" + copy.name + ".anim";
+            string uniquePath = AssetDatabase.GenerateUniqueAssetPath(desiredPath);
+            if (!string.Equals(uniquePath, desiredPath, System.StringComparison.Ordinal))
+            {
+                result.RenamedCount++;
+            }
+
+            AssetDatabase.CreateAsset(copy, uniquePath);
+            result.CreatedClips++;
+            if (string.IsNullOrEmpty(result.FirstOutputPath))
+            {
+                result.FirstOutputPath = uniquePath;
+            }
+
+            if (!ApplyChangesToClip(copy, clipPlan, false, ref result.ChangedKeys))
+            {
+                return;
+            }
+
+            EditorUtility.SetDirty(copy);
+            result.ChangedClips++;
+        }
+
+        private static bool ApplyChangesToClip(
+            AnimationClip target,
+            BlendshapeKeeperClipPlan clipPlan,
+            bool recordUndo,
+            ref int changedKeys)
+        {
+            if (target == null || clipPlan == null)
+            {
+                return false;
             }
 
             var changesByBinding =
@@ -64,7 +149,7 @@ namespace Poyo.CandyBox.BlendshapeKeeper.Editor
             foreach (KeyValuePair<EditorCurveBinding, List<BlendshapeKeeperChange>> group in
                      changesByBinding)
             {
-                AnimationCurve curve = AnimationUtility.GetEditorCurve(clip, group.Key);
+                AnimationCurve curve = AnimationUtility.GetEditorCurve(target, group.Key);
                 if (curve == null)
                 {
                     continue;
@@ -80,9 +165,9 @@ namespace Poyo.CandyBox.BlendshapeKeeper.Editor
                         continue;
                     }
 
-                    if (!undoRecorded)
+                    if (recordUndo && !undoRecorded)
                     {
-                        Undo.RecordObject(clip, UndoName);
+                        Undo.RecordObject(target, UndoName);
                         undoRecorded = true;
                     }
 
@@ -96,15 +181,31 @@ namespace Poyo.CandyBox.BlendshapeKeeper.Editor
 
                 if (curveChanged)
                 {
-                    AnimationUtility.SetEditorCurve(clip, group.Key, curve);
+                    AnimationUtility.SetEditorCurve(target, group.Key, curve);
                 }
             }
 
-            if (clipChanged)
+            return clipChanged;
+        }
+
+        private static string SanitizeSuffix(string suffix)
+        {
+            if (string.IsNullOrEmpty(suffix))
             {
-                EditorUtility.SetDirty(clip);
-                changedClips++;
+                return string.Empty;
             }
+
+            char[] invalidCharacters = Path.GetInvalidFileNameChars();
+            char[] characters = suffix.ToCharArray();
+            for (int characterIndex = 0; characterIndex < characters.Length; characterIndex++)
+            {
+                if (System.Array.IndexOf(invalidCharacters, characters[characterIndex]) >= 0)
+                {
+                    characters[characterIndex] = '_';
+                }
+            }
+
+            return new string(characters);
         }
     }
 }

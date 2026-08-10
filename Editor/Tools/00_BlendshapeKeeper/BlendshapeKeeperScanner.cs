@@ -21,7 +21,8 @@ namespace Poyo.CandyBox.BlendshapeKeeper.Editor
         internal static BlendshapeKeeperPlan Scan(
             GameObject avatarRoot,
             IReadOnlyList<SkinnedMeshRenderer> targetMeshes,
-            IReadOnlyList<AnimationClip> clips)
+            IReadOnlyList<AnimationClip> clips,
+            BlendshapeKeeperOutputMode outputMode)
         {
             var plan = new BlendshapeKeeperPlan();
             if (avatarRoot == null || targetMeshes == null || targetMeshes.Count == 0 ||
@@ -44,7 +45,7 @@ namespace Poyo.CandyBox.BlendshapeKeeper.Editor
 
                 try
                 {
-                    ScanClip(clip, meshesByPath, plan, skipKeys);
+                    ScanClip(clip, meshesByPath, outputMode, plan, skipKeys);
                 }
                 catch (Exception exception)
                 {
@@ -101,6 +102,7 @@ namespace Poyo.CandyBox.BlendshapeKeeper.Editor
         private static void ScanClip(
             AnimationClip clip,
             Dictionary<string, SkinnedMeshRenderer> meshesByPath,
+            BlendshapeKeeperOutputMode outputMode,
             BlendshapeKeeperPlan plan,
             HashSet<string> skipKeys)
         {
@@ -112,14 +114,16 @@ namespace Poyo.CandyBox.BlendshapeKeeper.Editor
                 return;
             }
 
-            if (!string.Equals(
+            if (outputMode == BlendshapeKeeperOutputMode.Overwrite &&
+                !string.Equals(
                     Path.GetExtension(assetPath), ".anim", StringComparison.OrdinalIgnoreCase))
             {
                 AddSkip(plan, skipKeys, clipTarget, ModelClipReason);
                 return;
             }
 
-            if (assetPath.StartsWith("Packages/", StringComparison.Ordinal))
+            if (outputMode == BlendshapeKeeperOutputMode.Overwrite &&
+                assetPath.StartsWith("Packages/", StringComparison.Ordinal))
             {
                 AddSkip(plan, skipKeys, clipTarget, ReadOnlyPathReason);
                 return;
@@ -205,6 +209,7 @@ namespace Poyo.CandyBox.BlendshapeKeeper.Editor
                 {
                     Binding = binding,
                     KeyIndex = keyIndex,
+                    Time = key.time,
                     OldValue = key.value,
                     NewValue = currentValue,
                     Label = displayPath + " / " + blendShapeName +
