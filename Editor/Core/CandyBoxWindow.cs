@@ -19,11 +19,24 @@ namespace Poyo.CandyBox.Editor
         private static readonly GUIContent DisabledButtonContent = new GUIContent("無効です");
         private static readonly GUIContent CompilingButtonContent = new GUIContent("コンパイル中…");
         private static readonly GUIContent OpenButtonContent = new GUIContent("開く");
+        private static readonly GUIContent UnavailableMarkerContent = new GUIContent("(未導入)");
+        private static readonly GUIContent UnavailableButtonContent =
+            new GUIContent("必要なパッケージがありません");
+        private static readonly GUIContent SelectionMarkerContent = new GUIContent("▶");
+        private static readonly GUIContent DependencyHeaderContent =
+            new GUIContent("必要なパッケージ");
+        private static readonly Color SelectedRowColor =
+            new Color(0.45f, 0.65f, 1f, 1f);
+        private const string NoDependencyLabel = "なし（追加の導入は不要です）";
+        private const string NotInstalledFormat =
+            "{0} が見つかりません。導入すると有効化できます。";
 
         [SerializeField] private string _selectedToolId;
         [SerializeField] private bool[] _pendingEnabled;
         private bool[] _actualEnabled;
         private bool _wasCompiling;
+        private float _dependencyHeaderWidth;
+        private string _selectedDependencyWarning = string.Empty;
 
         [MenuItem(CandyBoxInfo.MenuPath, false, CandyBoxInfo.MenuPriority)]
         private static void Open()
@@ -43,6 +56,8 @@ namespace Poyo.CandyBox.Editor
             {
                 _selectedToolId = CandyBoxToolCatalog.Tools[0].Id;
             }
+
+            RefreshSelectedToolDetails();
         }
 
         private void Update()
@@ -83,11 +98,38 @@ namespace Poyo.CandyBox.Editor
             for (int i = 0; i < CandyBoxToolCatalog.Tools.Length; i++)
             {
                 CandyBoxToolEntry tool = CandyBoxToolCatalog.Tools[i];
-                EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+                bool isSelected = string.Equals(
+                    _selectedToolId, tool.Id, StringComparison.Ordinal);
+                Color previousBackground = GUI.backgroundColor;
+                if (isSelected)
+                {
+                    GUI.backgroundColor = SelectedRowColor;
+                }
 
+                EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+                GUI.backgroundColor = previousBackground;
+
+                if (isSelected)
+                {
+                    EditorGUILayout.LabelField(
+                        SelectionMarkerContent, GUILayout.Width(14f));
+                }
+                else
+                {
+                    EditorGUILayout.LabelField(
+                        GUIContent.none, GUILayout.Width(14f));
+                }
+
+                EditorGUI.BeginDisabledGroup(!tool.IsAvailable);
                 _pendingEnabled[i] = EditorGUILayout.Toggle(
                     _pendingEnabled[i], GUILayout.Width(18f));
+                EditorGUI.EndDisabledGroup();
                 EditorGUILayout.LabelField(tool.DisplayName, EditorStyles.boldLabel);
+                if (!tool.IsAvailable)
+                {
+                    EditorGUILayout.LabelField(
+                        UnavailableMarkerContent, GUILayout.Width(54f));
+                }
                 if (_pendingEnabled[i] != _actualEnabled[i])
                 {
                     EditorGUILayout.LabelField(
@@ -97,10 +139,17 @@ namespace Poyo.CandyBox.Editor
 
                 EditorGUILayout.EndHorizontal();
                 Rect rowRect = GUILayoutUtility.GetLastRect();
+                EditorGUIUtility.AddCursorRect(rowRect, MouseCursor.Link);
                 if (currentEvent.type == EventType.MouseDown &&
                     rowRect.Contains(currentEvent.mousePosition))
                 {
-                    _selectedToolId = tool.Id;
+                    if (!string.Equals(
+                            _selectedToolId, tool.Id, StringComparison.Ordinal))
+                    {
+                        _selectedToolId = tool.Id;
+                        RefreshSelectedToolDetails();
+                    }
+
                     currentEvent.Use();
                     Repaint();
                 }
@@ -142,7 +191,29 @@ namespace Poyo.CandyBox.Editor
 
             CandyBoxToolEntry selectedTool = CandyBoxToolCatalog.Tools[selectedIndex];
             EditorGUILayout.LabelField(
+                selectedTool.DisplayName, EditorStyles.boldLabel);
+            EditorGUILayout.LabelField(
                 selectedTool.Description, EditorStyles.wordWrappedLabel);
+            if (_dependencyHeaderWidth <= 0f)
+            {
+                // NOTE: GUI コンテキスト外では計測できないため、最初の描画時だけ求める。
+                _dependencyHeaderWidth =
+                    EditorStyles.label.CalcSize(DependencyHeaderContent).x + 4f;
+            }
+
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField(
+                DependencyHeaderContent, GUILayout.Width(_dependencyHeaderWidth));
+            EditorGUILayout.LabelField(
+                string.IsNullOrEmpty(selectedTool.RequirementLabel)
+                    ? NoDependencyLabel
+                    : selectedTool.RequirementLabel);
+            EditorGUILayout.EndHorizontal();
+            if (!string.IsNullOrEmpty(_selectedDependencyWarning))
+            {
+                EditorGUILayout.HelpBox(
+                    _selectedDependencyWarning, MessageType.Warning);
+            }
             EditorGUILayout.Space();
 
             bool isEnabled = _actualEnabled[selectedIndex];
@@ -152,7 +223,12 @@ namespace Poyo.CandyBox.Editor
 
             GUIContent buttonContent;
             bool canOpen;
-            if (!isEnabled)
+            if (!selectedTool.IsAvailable)
+            {
+                buttonContent = UnavailableButtonContent;
+                canOpen = false;
+            }
+            else if (!isEnabled)
             {
                 buttonContent = DisabledButtonContent;
                 canOpen = false;
@@ -197,6 +273,28 @@ namespace Poyo.CandyBox.Editor
             {
                 Array.Copy(_actualEnabled, _pendingEnabled, toolCount);
             }
+
+            // NOTE: 要件を満たさない行は操作できないため、解消不能な保留差分を残さない。
+            for (int toolIndex = 0; toolIndex < toolCount; toolIndex++)
+            {
+                if (!CandyBoxToolCatalog.Tools[toolIndex].IsAvailable)
+                {
+                    _pendingEnabled[toolIndex] = _actualEnabled[toolIndex];
+                }
+            }
+        }
+
+        private void RefreshSelectedToolDetails()
+        {
+            CandyBoxToolEntry selectedTool =
+                CandyBoxToolCatalog.Find(_selectedToolId);
+            _selectedDependencyWarning =
+                selectedTool != null &&
+                !selectedTool.IsAvailable &&
+                !string.IsNullOrEmpty(selectedTool.RequirementLabel)
+                    ? string.Format(
+                        NotInstalledFormat, selectedTool.RequirementLabel)
+                    : string.Empty;
         }
 
         private bool HasPendingChanges()
