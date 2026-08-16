@@ -864,10 +864,12 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
                     group.IsExpanded, group.Header, true);
                 EditorGUI.showMixedValue = anyApplied && !allApplied;
                 EditorGUI.BeginChangeCheck();
-                bool groupApplied = GUILayout.Toggle(
-                    allApplied, GroupApplyContent, GUILayout.Width(18f));
+                bool groupApplied = EditorGUILayout.Toggle(
+                    allApplied, GUILayout.Width(18f));
                 bool groupChanged = EditorGUI.EndChangeCheck();
                 EditorGUI.showMixedValue = false;
+                // NOTE: チェック自体には文字を置けないため、同じ矩形へ空のラベルを重ねて説明を出す。
+                GUI.Label(GUILayoutUtility.GetLastRect(), GroupApplyContent);
                 EditorGUILayout.EndHorizontal();
                 if (groupChanged)
                 {
