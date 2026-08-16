@@ -63,7 +63,7 @@ namespace Poyo.CandyBox.AaoMergePhysBoneHelper.Editor
         {
             var window = GetWindow<AaoMergePhysBoneHelperWindow>(
                 false, "02_Helper for AAO Merge PhysBone", true);
-            window.minSize = new Vector2(640f, 520f);
+            window.minSize = new Vector2(680f, 660f);
             window.Show();
         }
 

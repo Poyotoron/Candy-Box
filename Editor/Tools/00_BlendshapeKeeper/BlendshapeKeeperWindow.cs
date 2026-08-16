@@ -101,7 +101,7 @@ namespace Poyo.CandyBox.BlendshapeKeeper.Editor
         {
             var window = GetWindow<BlendshapeKeeperWindow>(
                 false, "00_Blendshape Keeper", true);
-            window.minSize = new Vector2(560f, 400f);
+            window.minSize = new Vector2(600f, 600f);
             window.Show();
         }
 

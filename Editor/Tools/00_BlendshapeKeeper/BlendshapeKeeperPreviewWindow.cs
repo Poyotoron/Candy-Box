@@ -79,7 +79,7 @@ namespace Poyo.CandyBox.BlendshapeKeeper.Editor
         {
             var window = GetWindow<BlendshapeKeeperPreviewWindow>(
                 true, "Blendshape Keeper プレビュー", true);
-            window.minSize = new Vector2(480f, 420f);
+            window.minSize = new Vector2(560f, 560f);
             window.ReleasePreviewResources();
             window._avatarRoot = avatarRoot;
             window._plan = plan;
