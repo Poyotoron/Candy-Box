@@ -114,7 +114,7 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
         }
 
         internal static int CopySelected(Material source, Material destination,
-            List<HairTonePropertyDiffGroup> groups)
+            List<HairTonePropertyDiffGroup> groups, List<HairTonePropertyRecord> records)
         {
             if (source == null || destination == null || groups == null)
             {
@@ -132,6 +132,12 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
                         !destination.HasProperty(entry.Name))
                     {
                         continue;
+                    }
+
+                    HairTonePropertyRecord record = null;
+                    if (records != null)
+                    {
+                        record = CreateRecord(source, destination, entry);
                     }
 
                     switch (entry.Type)
@@ -153,11 +159,88 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
                             continue;
                     }
 
+                    if (record != null)
+                    {
+                        records.Add(record);
+                    }
+
                     copied++;
                 }
             }
 
             return copied;
+        }
+
+        internal static void WriteRecord(
+            Material material, HairTonePropertyRecord record, bool applied)
+        {
+            if (material == null || record == null ||
+                string.IsNullOrEmpty(record.Name) || !material.HasProperty(record.Name))
+            {
+                return;
+            }
+
+            switch (record.Type)
+            {
+                case ShaderPropertyType.Color:
+                    material.SetColor(record.Name,
+                        applied ? record.CurrentColor : record.PreviousColor);
+                    break;
+                case ShaderPropertyType.Float:
+                case ShaderPropertyType.Range:
+                    material.SetFloat(record.Name,
+                        applied ? record.CurrentFloat : record.PreviousFloat);
+                    break;
+                case ShaderPropertyType.Vector:
+                    material.SetVector(record.Name,
+                        applied ? record.CurrentVector : record.PreviousVector);
+                    break;
+                case ShaderPropertyType.Texture:
+                    material.SetTexture(record.Name,
+                        applied ? record.SourceTexture : record.PreviousTexture);
+                    break;
+            }
+        }
+
+        private static HairTonePropertyRecord CreateRecord(Material source,
+            Material destination, HairTonePropertyDiffEntry entry)
+        {
+            var record = new HairTonePropertyRecord
+            {
+                Name = entry.Name,
+                Type = entry.Type,
+                IsApplied = true,
+                RowContent = new GUIContent(entry.DisplayName, entry.Name),
+                PreviousValueLabel = entry.DestinationValueLabel,
+                SourceValueLabel = entry.SourceValueLabel,
+            };
+            switch (entry.Type)
+            {
+                case ShaderPropertyType.Color:
+                    record.SourceColor = source.GetColor(entry.Name);
+                    record.PreviousColor = destination.GetColor(entry.Name);
+                    record.CurrentColor = record.SourceColor;
+                    break;
+                case ShaderPropertyType.Float:
+                case ShaderPropertyType.Range:
+                    record.SourceFloat = source.GetFloat(entry.Name);
+                    record.PreviousFloat = destination.GetFloat(entry.Name);
+                    record.CurrentFloat = record.SourceFloat;
+                    break;
+                case ShaderPropertyType.Vector:
+                    record.SourceVector = source.GetVector(entry.Name);
+                    record.PreviousVector = destination.GetVector(entry.Name);
+                    record.CurrentVector = record.SourceVector;
+                    break;
+                case ShaderPropertyType.Texture:
+                    record.SourceTexture = source.GetTexture(entry.Name);
+                    record.PreviousTexture = destination.GetTexture(entry.Name);
+                    break;
+                default:
+                    return null;
+            }
+
+            return record;
         }
 
         private static bool IsSupported(ShaderPropertyType type, string name,

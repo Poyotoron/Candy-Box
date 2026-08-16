@@ -21,7 +21,11 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
         internal string LutPath;
         internal string MaskPath;
         internal int CopiedPropertyCount;
+        internal int BakedPixelCount;
+        internal int BakedWidth;
+        internal int BakedHeight;
         internal bool IsOverwrite;
+        internal HairToneAppliedState AppliedState;
         internal string Error;
         internal bool Succeeded => string.IsNullOrEmpty(Error);
     }
@@ -31,6 +35,7 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
         private const string UndoName = "Hair Tone Matcher";
         private const int MaxMaskSize = 2048;
         private const int DefaultMaskSize = 1024;
+        private const int PreviewSize = 256;
 
         internal static List<HairToneApplyResult> Apply(HairToneMatcherPlan plan,
             HairToneMethod method, HairToneOutputMode outputMode,
@@ -108,12 +113,26 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
                     workingLut = HairToneGradationLut.Build(
                         plan.SourceCdf.R, plan.SourceCdf.G, plan.SourceCdf.B,
                         target.Cdf.R, target.Cdf.G, target.Cdf.B);
-                    result.LutPath = SavePng(workingLut, outputFolderPath,
-                        baseName + "_Gradation.png", outputMode, true);
+                    result.LutPath = GetPngAssetPath(outputFolderPath,
+                        baseName + "_Gradation.png", outputMode);
+                    SavePng(workingLut, result.LutPath, true);
                     lutAsset = AssetDatabase.LoadAssetAtPath<Texture2D>(result.LutPath);
                 }
 
-                Texture2D sourceTexture = GetMainTexture(target);
+                Texture2D sourceTexture = GetMainTexture(
+                    target, out string mainTextureProperty);
+                Color[] previewPixels = null;
+                bool[] previewMask = null;
+                Color previewMainColor = HairToneShaderProfile.ReadMainColor(
+                    target.Material, target.Profile);
+                if (sourceTexture != null)
+                {
+                    previewPixels = HairTonePixelSampler.Read(
+                        sourceTexture, PreviewSize, PreviewSize);
+                    previewMask = BuildBakeMask(
+                        target.RendererSlots, plan.UserMask, plan.UseSubmeshUv,
+                        sourceTexture, PreviewSize, PreviewSize);
+                }
                 bool[] highResolutionMask = null;
                 int maskWidth = sourceTexture != null
                     ? Mathf.Min(sourceTexture.width, MaxMaskSize) : DefaultMaskSize;
@@ -125,8 +144,9 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
                         maskWidth, maskHeight);
                     workingMask = HairToneRegionMask.CreateMaskTexture(
                         highResolutionMask, maskWidth, maskHeight);
-                    result.MaskPath = SavePng(workingMask, outputFolderPath,
-                        baseName + "_Mask.png", outputMode, false);
+                    result.MaskPath = GetPngAssetPath(outputFolderPath,
+                        baseName + "_Mask.png", outputMode);
+                    SavePng(workingMask, result.MaskPath, false);
                 }
 
                 Material material;
@@ -145,20 +165,39 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
                     AssetDatabase.CreateAsset(material, result.MaterialPath);
                 }
 
+                HairToneMaterialState previousState =
+                    HairToneShaderProfile.CaptureState(material, target.Profile);
+                var propertyRecords = new List<HairTonePropertyRecord>();
                 result.CopiedPropertyCount = HairTonePropertyDiff.CopySelected(
-                    plan.SourceMaterial, material, target.PropertyDiffGroups);
+                    plan.SourceMaterial, material, target.PropertyDiffGroups,
+                    propertyRecords);
+                List<HairTonePropertyRecordGroup> propertyGroups =
+                    BuildPropertyRecordGroups(propertyRecords, target.Profile);
 
+                bool useGradation = method == HairToneMethod.GradationMatch;
                 if (outputMode == HairToneOutputMode.BakeTexture)
                 {
-                    result.TexturePath = BakeTexture(plan, target, sourceTexture,
-                        outputFolderPath, method);
+                    if (sourceTexture == null)
+                    {
+                        throw new InvalidOperationException(
+                            "メインテクスチャが見つかりません。");
+                    }
+
+                    result.TexturePath = AssetDatabase.GenerateUniqueAssetPath(
+                        CombineAssetPath(outputFolderPath,
+                            SanitizeFileName(sourceTexture.name) + "_Matched.png"));
+                    BakeTexture(plan, target, sourceTexture,
+                        result.TexturePath, method, out int bakedPixelCount,
+                        out int bakedWidth, out int bakedHeight);
+                    result.BakedPixelCount = bakedPixelCount;
+                    result.BakedWidth = bakedWidth;
+                    result.BakedHeight = bakedHeight;
                     Texture2D baked = AssetDatabase.LoadAssetAtPath<Texture2D>(result.TexturePath);
-                    SetTexture(material, target.Profile.MainTexProperty, baked);
+                    SetTexture(material, mainTextureProperty, baked);
                     HairToneShaderProfile.WriteNeutral(material, target.Profile);
                 }
                 else
                 {
-                    bool useGradation = method == HairToneMethod.GradationMatch;
                     HairToneShaderProfile.Write(material, target.Profile,
                         useGradation ? HairToneAdjustment.Neutral : target.Adjustment,
                         useGradation);
@@ -175,6 +214,36 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
                     SetRegionMask(material, target.Profile, maskAsset);
                 }
 
+                HairToneAdjustment appliedAdjustment =
+                    useGradation ? HairToneAdjustment.Neutral : target.Adjustment;
+                bool isBaked = outputMode == HairToneOutputMode.BakeTexture;
+                result.AppliedState = new HairToneAppliedState
+                {
+                    Material = material,
+                    Profile = target.Profile,
+                    Header = string.Format("対象: {0}", target.Label),
+                    IsExpanded = true,
+                    IsBaked = isBaked,
+                    IsToneApplied = true,
+                    AppliedAdjustment = appliedAdjustment,
+                    CurrentAdjustment = appliedAdjustment,
+                    UseGradation = useGradation,
+                    GradationLut = lutAsset,
+                    BakeSourceTexture = isBaked ? sourceTexture : null,
+                    BakedTexturePath = isBaked ? result.TexturePath : null,
+                    MainTextureProperty = isBaked ? mainTextureProperty : null,
+                    RendererSlots = isBaked
+                        ? new List<HairToneRendererSlot>(target.RendererSlots) : null,
+                    UserMask = isBaked ? plan.UserMask : null,
+                    UseSubmeshUv = isBaked && plan.UseSubmeshUv,
+                    IsGradationBake = isBaked && useGradation,
+                    PreviewPixels = previewPixels,
+                    PreviewMask = previewMask,
+                    PreviewMainColor = previewMainColor,
+                    PreviousState = previousState,
+                    PropertyGroups = propertyGroups,
+                };
+
                 EditorUtility.SetDirty(material);
                 if (outputMode != HairToneOutputMode.Overwrite)
                 {
@@ -182,6 +251,18 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
                 }
 
                 return result;
+            }
+            catch
+            {
+                if (outputMode != HairToneOutputMode.Overwrite)
+                {
+                    DeleteGeneratedAsset(result.MaterialPath);
+                    DeleteGeneratedAsset(result.TexturePath);
+                    DeleteGeneratedAsset(result.LutPath);
+                    DeleteGeneratedAsset(result.MaskPath);
+                }
+
+                throw;
             }
             finally
             {
@@ -197,21 +278,20 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
             }
         }
 
-        private static string BakeTexture(HairToneMatcherPlan plan,
-            HairToneTarget target, Texture2D sourceTexture, string outputFolderPath,
-            HairToneMethod method)
+        private static void BakeTexture(HairToneMatcherPlan plan,
+            HairToneTarget target, Texture2D sourceTexture, string outputPath,
+            HairToneMethod method, out int bakedPixelCount,
+            out int bakedWidth, out int bakedHeight)
         {
             if (sourceTexture == null)
             {
                 throw new InvalidOperationException("メインテクスチャが見つかりません。");
             }
 
-            int width = sourceTexture.width;
-            int height = sourceTexture.height;
-            Color[] pixels = HairTonePixelSampler.Read(sourceTexture, width, height);
-            bool[] mask = BuildMask(plan, target, sourceTexture, width, height);
+            bool[] mask = BuildBakeMask(
+                target.RendererSlots, plan.UserMask, plan.UseSubmeshUv,
+                sourceTexture, sourceTexture.width, sourceTexture.height);
             Texture2D lut = null;
-            Texture2D output = null;
             try
             {
                 if (method == HairToneMethod.GradationMatch)
@@ -221,6 +301,62 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
                         target.Cdf.R, target.Cdf.G, target.Cdf.B);
                 }
 
+                WriteBakedTexture(sourceTexture, mask, target.Adjustment,
+                    target.Profile, lut, outputPath, out bakedPixelCount,
+                    out bakedWidth, out bakedHeight);
+                CopyTextureImporterSettings(
+                    AssetDatabase.GetAssetPath(sourceTexture), outputPath);
+            }
+            finally
+            {
+                if (lut != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(lut);
+                }
+            }
+        }
+
+        internal static void Rebake(HairToneAppliedState state,
+            HairToneAdjustment adjustment, out int bakedPixelCount,
+            out int width, out int height)
+        {
+            if (state == null || state.BakeSourceTexture == null)
+            {
+                throw new InvalidOperationException("元のテクスチャが見つかりません。");
+            }
+
+            if (state.IsGradationBake)
+            {
+                throw new InvalidOperationException(
+                    "階調マッチで焼き込んだテクスチャは焼き直せません。");
+            }
+
+            if (string.IsNullOrEmpty(state.BakedTexturePath))
+            {
+                throw new InvalidOperationException("焼き込んだテクスチャが見つかりません。");
+            }
+
+            Texture2D sourceTexture = state.BakeSourceTexture;
+            bool[] mask = BuildBakeMask(
+                state.RendererSlots, state.UserMask, state.UseSubmeshUv,
+                sourceTexture, sourceTexture.width, sourceTexture.height);
+            WriteBakedTexture(sourceTexture, mask, adjustment, state.Profile,
+                null, state.BakedTexturePath, out bakedPixelCount,
+                out width, out height);
+        }
+
+        private static void WriteBakedTexture(Texture2D sourceTexture,
+            bool[] mask, HairToneAdjustment adjustment,
+            HairToneShaderProfile profile, Texture2D lut, string outputPath,
+            out int bakedPixelCount, out int width, out int height)
+        {
+            width = sourceTexture.width;
+            height = sourceTexture.height;
+            bakedPixelCount = 0;
+            Color[] pixels = HairTonePixelSampler.Read(sourceTexture, width, height);
+            Texture2D output = null;
+            try
+            {
                 for (int i = 0; i < pixels.Length; i++)
                 {
                     if (mask == null || i >= mask.Length || !mask[i])
@@ -229,31 +365,29 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
                     }
 
                     float alpha = pixels[i].a;
-                    pixels[i] = method == HairToneMethod.GradationMatch
+                    pixels[i] = lut != null
                         ? HairToneGradationLut.ApplyToPixel(pixels[i], lut)
                         : HairToneShaderProfile.ApplyToPixel(
-                            pixels[i], target.Adjustment, target.Profile);
+                            pixels[i], adjustment, profile);
                     pixels[i].a = alpha;
+                    bakedPixelCount++;
+                }
+
+                if (bakedPixelCount == 0)
+                {
+                    throw new InvalidOperationException(
+                        "適用範囲に画素がありません。UV の絞り込みと除外マスクを確認してください。");
                 }
 
                 output = new Texture2D(width, height, TextureFormat.RGBA32, false);
                 output.SetPixels(pixels);
                 output.Apply(false, false);
-                string path = AssetDatabase.GenerateUniqueAssetPath(
-                    CombineAssetPath(outputFolderPath,
-                        SanitizeFileName(sourceTexture.name) + "_Matched.png"));
-                File.WriteAllBytes(path, output.EncodeToPNG());
-                AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
-                CopyTextureImporterSettings(AssetDatabase.GetAssetPath(sourceTexture), path);
-                return path;
+                File.WriteAllBytes(outputPath, output.EncodeToPNG());
+                AssetDatabase.ImportAsset(
+                    outputPath, ImportAssetOptions.ForceSynchronousImport);
             }
             finally
             {
-                if (lut != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(lut);
-                }
-
                 if (output != null)
                 {
                     UnityEngine.Object.DestroyImmediate(output);
@@ -274,18 +408,87 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
             }
 
             Color[] userMaskPixels = HairTonePixelSampler.Read(plan.UserMask, width, height);
-            HairToneRendererSlot representative = target.RendererSlots != null &&
-                target.RendererSlots.Count > 0 ? target.RendererSlots[0] : null;
             return HairToneRegionMask.Build(
-                representative != null ? representative.Renderer : null,
-                representative != null ? representative.MaterialSlot : 0,
-                mainPixels, existingMaskPixels, userMaskPixels,
+                target.RendererSlots, mainPixels, existingMaskPixels, userMaskPixels,
                 plan.AlphaThreshold, plan.UseSubmeshUv, width, height, out _);
         }
 
-        private static Texture2D GetMainTexture(HairToneTarget target)
+        private static List<HairTonePropertyRecordGroup> BuildPropertyRecordGroups(
+            List<HairTonePropertyRecord> records, HairToneShaderProfile profile)
         {
-            return target.Material.GetTexture(target.Profile.MainTexProperty) as Texture2D;
+            var result = new List<HairTonePropertyRecordGroup>();
+            if (records == null || records.Count == 0 || profile == null)
+            {
+                return result;
+            }
+
+            HairTonePropertyGroup[] definitions =
+                HairTonePropertyGroup.GetGroups(profile.Id);
+            var entriesByGroup =
+                new List<HairTonePropertyRecord>[definitions.Length];
+            for (int i = 0; i < entriesByGroup.Length; i++)
+            {
+                entriesByGroup[i] = new List<HairTonePropertyRecord>();
+            }
+
+            for (int recordIndex = 0; recordIndex < records.Count; recordIndex++)
+            {
+                HairTonePropertyRecord record = records[recordIndex];
+                for (int groupIndex = 0; groupIndex < definitions.Length; groupIndex++)
+                {
+                    if (definitions[groupIndex].MatchesProperty(record.Name))
+                    {
+                        entriesByGroup[groupIndex].Add(record);
+                        break;
+                    }
+                }
+            }
+
+            for (int i = 0; i < definitions.Length; i++)
+            {
+                if (entriesByGroup[i].Count == 0)
+                {
+                    continue;
+                }
+
+                result.Add(new HairTonePropertyRecordGroup
+                {
+                    DisplayName = definitions[i].DisplayName,
+                    Header = string.Format("{0}  {1} 件",
+                        definitions[i].DisplayName, entriesByGroup[i].Count),
+                    IsExpanded = false,
+                    Entries = entriesByGroup[i],
+                });
+            }
+
+            return result;
+        }
+
+        private static bool[] BuildBakeMask(
+            List<HairToneRendererSlot> rendererSlots, Texture2D userMask,
+            bool useSubmeshUv, Texture2D mainTexture, int width, int height)
+        {
+            Color[] mainPixels = HairTonePixelSampler.Read(mainTexture, width, height);
+            Color[] userMaskPixels = HairTonePixelSampler.Read(userMask, width, height);
+            // NOTE: 半透明の毛先や既存マスクの境界を塗り残すと色に段差が出るため、
+            //       焼き込みだけは統計用のアルファ閾値と既存マスクを適用しない。
+            return HairToneRegionMask.Build(
+                rendererSlots, mainPixels, null, userMaskPixels,
+                0f, useSubmeshUv, width, height, out _);
+        }
+
+        private static Texture2D GetMainTexture(
+            HairToneTarget target, out string mainTextureProperty)
+        {
+            mainTextureProperty = HairToneShaderProfile.ResolveMainTexPropertyName(
+                target.Material);
+            if (string.IsNullOrEmpty(mainTextureProperty) ||
+                !target.Material.HasProperty(mainTextureProperty))
+            {
+                throw new InvalidOperationException("メインテクスチャが見つかりません。");
+            }
+
+            return target.Material.GetTexture(mainTextureProperty) as Texture2D;
         }
 
         private static void CopyTextureImporterSettings(string fromPath, string toPath)
@@ -334,12 +537,16 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
             }
         }
 
-        private static string SavePng(Texture2D texture, string folderPath,
-            string fileName, HairToneOutputMode outputMode, bool isLut)
+        private static string GetPngAssetPath(string folderPath,
+            string fileName, HairToneOutputMode outputMode)
         {
             string desiredPath = CombineAssetPath(folderPath, fileName);
-            string assetPath = outputMode == HairToneOutputMode.Overwrite
+            return outputMode == HairToneOutputMode.Overwrite
                 ? desiredPath : AssetDatabase.GenerateUniqueAssetPath(desiredPath);
+        }
+
+        private static void SavePng(Texture2D texture, string assetPath, bool isLut)
+        {
             File.WriteAllBytes(assetPath, texture.EncodeToPNG());
             AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceSynchronousImport);
             var importer = AssetImporter.GetAtPath(assetPath) as TextureImporter;
@@ -352,8 +559,27 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
                 importer.mipmapEnabled = false;
                 importer.SaveAndReimport();
             }
+        }
 
-            return assetPath;
+        private static void DeleteGeneratedAsset(string assetPath)
+        {
+            if (string.IsNullOrEmpty(assetPath))
+            {
+                return;
+            }
+
+            try
+            {
+                if (!AssetDatabase.DeleteAsset(assetPath) && File.Exists(assetPath))
+                {
+                    Debug.LogWarning(string.Format(
+                        "失敗した処理の生成物を削除できませんでした: {0}", assetPath));
+                }
+            }
+            catch (Exception cleanupException)
+            {
+                Debug.LogException(cleanupException);
+            }
         }
 
         private static void SetRegionMask(Material material,

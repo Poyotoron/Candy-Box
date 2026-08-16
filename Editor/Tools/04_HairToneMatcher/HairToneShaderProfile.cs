@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -178,6 +179,103 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
                 material.GetFloat(profile.LockProperty) >= 0.5f;
         }
 
+        internal static HairToneMaterialState CaptureState(
+            Material material, HairToneShaderProfile profile)
+        {
+            var state = new HairToneMaterialState
+            {
+                Floats = new List<(string, float)>(),
+                Vectors = new List<(string, Vector4)>(),
+                Textures = new List<(string, Texture)>(),
+                Keywords = new List<(string, bool)>(),
+            };
+            if (material == null || profile == null)
+            {
+                return state;
+            }
+
+            CaptureVector(material, profile.AdjustVectorProperty, state.Vectors);
+            CaptureFloat(material, profile.HueProperty, state.Floats);
+            CaptureFloat(material, profile.SaturationProperty, state.Floats);
+            CaptureFloat(material, profile.BrightnessProperty, state.Floats);
+            CaptureFloat(material, profile.GammaProperty, state.Floats);
+            CaptureFloat(material, profile.GradationStrengthProperty, state.Floats);
+            for (int i = 0; i < profile.EnableProperties.Length; i++)
+            {
+                CaptureFloat(material, profile.EnableProperties[i], state.Floats);
+            }
+
+            for (int i = 0; i < profile.GradationEnableProperties.Length; i++)
+            {
+                CaptureFloat(material, profile.GradationEnableProperties[i], state.Floats);
+            }
+
+            for (int i = 0; i < profile.FixedProperties.Length; i++)
+            {
+                CaptureFloat(material, profile.FixedProperties[i].Item1, state.Floats);
+            }
+
+            CaptureTexture(material, profile.GradationTexProperty, state.Textures);
+            for (int i = 0; i < profile.EnableKeywords.Length; i++)
+            {
+                string keyword = profile.EnableKeywords[i];
+                if (!string.IsNullOrEmpty(keyword))
+                {
+                    state.Keywords.Add((keyword, material.IsKeywordEnabled(keyword)));
+                }
+            }
+
+            return state;
+        }
+
+        internal static void RestoreState(Material material, HairToneMaterialState state)
+        {
+            if (material == null || state == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < state.Floats.Count; i++)
+            {
+                (string, float) value = state.Floats[i];
+                if (material.HasProperty(value.Item1))
+                {
+                    material.SetFloat(value.Item1, value.Item2);
+                }
+            }
+
+            for (int i = 0; i < state.Vectors.Count; i++)
+            {
+                (string, Vector4) value = state.Vectors[i];
+                if (material.HasProperty(value.Item1))
+                {
+                    material.SetVector(value.Item1, value.Item2);
+                }
+            }
+
+            for (int i = 0; i < state.Textures.Count; i++)
+            {
+                (string, Texture) value = state.Textures[i];
+                if (material.HasProperty(value.Item1))
+                {
+                    material.SetTexture(value.Item1, value.Item2);
+                }
+            }
+
+            for (int i = 0; i < state.Keywords.Count; i++)
+            {
+                (string, bool) value = state.Keywords[i];
+                if (value.Item2)
+                {
+                    material.EnableKeyword(value.Item1);
+                }
+                else
+                {
+                    material.DisableKeyword(value.Item1);
+                }
+            }
+        }
+
         internal static void Write(Material material, HairToneShaderProfile profile,
             HairToneAdjustment value, bool useGradation)
         {
@@ -239,9 +337,15 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
 
             if (profile.Id == PoiyomiId)
             {
+                float hue = GetFloat(material, PoiHue, 0f);
+                if (hue > 0.5f)
+                {
+                    hue -= 1f;
+                }
+
                 return new HairToneAdjustment
                 {
-                    Hue = GetFloat(material, PoiHue, 0f),
+                    Hue = hue,
                     Saturation = GetFloat(material, PoiSaturation, 0f) + 1f,
                     Value = GetFloat(material, PoiBrightness, 0f) + 1f,
                     Gamma = GetFloat(material, PoiGamma, 1f),
@@ -375,6 +479,33 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
             if (!string.IsNullOrEmpty(property) && material.HasProperty(property))
             {
                 material.SetVector(property, value);
+            }
+        }
+
+        private static void CaptureFloat(Material material, string property,
+            List<(string, float)> values)
+        {
+            if (!string.IsNullOrEmpty(property) && material.HasProperty(property))
+            {
+                values.Add((property, material.GetFloat(property)));
+            }
+        }
+
+        private static void CaptureVector(Material material, string property,
+            List<(string, Vector4)> values)
+        {
+            if (!string.IsNullOrEmpty(property) && material.HasProperty(property))
+            {
+                values.Add((property, material.GetVector(property)));
+            }
+        }
+
+        private static void CaptureTexture(Material material, string property,
+            List<(string, Texture)> values)
+        {
+            if (!string.IsNullOrEmpty(property) && material.HasProperty(property))
+            {
+                values.Add((property, material.GetTexture(property)));
             }
         }
 

@@ -78,7 +78,7 @@ namespace Poyo.CandyBox.MaBlendshapeSyncHelper.Editor
         {
             var window = GetWindow<MaBlendshapeSyncHelperWindow>(
                 false, "01_Helper for MA Blendshape Sync", true);
-            window.minSize = new Vector2(620f, 480f);
+            window.minSize = new Vector2(660f, 640f);
             window.Show();
         }
 
