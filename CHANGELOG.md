@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.5.0] - 2026-08-16
+
+### Added
+
+- Hair Tone Matcher to suggest color adjustments that bring replacement hair closer to the original hair.
+- Material-based tone adjustment with a choice between creating and assigning a duplicate or overwriting the destination material.
+- Statistical matching and point sampling from two textures.
+- Selective copying of compatible material settings from the source hair.
+- Region masks for excluding areas that should keep their original color.
+- Support for lilToon and Poiyomi materials.
+- Batch matching for multiple renderers and material slots, with adjustments calculated separately for each target material.
+- An output mode that creates a newly adjusted main texture without changing the original texture.
+
+### Changed
+
+- Compatible material settings are grouped by feature and can be filtered by name before copying.
+
 ## [0.4.0] - 2026-08-10
 
 ### Added
