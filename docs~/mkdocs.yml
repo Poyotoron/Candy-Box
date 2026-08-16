@@ -1,0 +1,63 @@
+site_name: Candy Box
+site_url: https://ghp.maaaaa.net/Candy-Box/
+repo_url: https://github.com/Poyotoron/Candy-Box
+site_dir: site
+
+theme:
+  name: material
+  language: ja
+  custom_dir: overrides
+  # サイト共通のファビコン。実体は www.maaaaa.net 側にあり、そちらを差し替えれば全ツールに反映される
+  favicon: https://www.maaaaa.net/favicon.png
+  features:
+    - navigation.sections
+    - navigation.expand
+    - toc.follow
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: ダークテーマに切り替える
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: ライトテーマに切り替える
+
+plugins:
+  - search:
+      lang: ja
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.details
+  - pymdownx.superfences
+  - tables
+  - toc:
+      permalink: true
+
+extra_css:
+  - stylesheets/extra.css
+
+extra:
+  candy_box_version: !ENV [CANDY_BOX_VERSION, dev]
+
+nav:
+  - はじめに: index.md
+  - インストール: install.md
+  - 設定ウィンドウ: settings.md
+  - 00_Blendshape Keeper: blendshape-keeper.md
+  - 01_Helper for MA Blendshape Sync: ma-blendshape-sync.md
+  - 02_Helper for AAO Merge PhysBone: merge-physbone.md
+  - 03_Helper for AAO Merge Bone: merge-bone.md
+  - 04_Hair Tone Matcher: hair-tone-matcher.md
+  - 困ったときは: troubleshooting.md
+  - 更新履歴: changelog.md

@@ -1,0 +1,23 @@
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: #e0457b;
+  --md-primary-fg-color--light: #ea6f9a;
+  --md-primary-fg-color--dark: #a8305a;
+  --md-accent-fg-color: #c8306a;
+  --md-typeset-a-color: #c8306a;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #c22f63;
+  --md-primary-fg-color--light: #ff6fa5;
+  --md-primary-fg-color--dark: #8d1f46;
+  --md-accent-fg-color: #ff6fa5;
+  --md-typeset-a-color: #ff86b5;
+}
+
+.md-typeset h1,
+.md-typeset h2 {
+  color: var(--md-typeset-a-color);
+}
+
+/* 注記ブロックの色は種類ごとの既定色（警告=橙、危険=赤 …）をそのまま使う。
+   基調色で塗り潰すと、警告と補足の区別がつかなくなるため。 */
