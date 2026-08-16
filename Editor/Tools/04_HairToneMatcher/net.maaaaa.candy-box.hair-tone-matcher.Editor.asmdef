@@ -1,0 +1,20 @@
+{
+    "name": "net.maaaaa.candy-box.hair-tone-matcher.Editor",
+    "rootNamespace": "Poyo.CandyBox.HairToneMatcher.Editor",
+    "references": [
+        "net.maaaaa.candy-box.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "CANDY_BOX_TOOL_04"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
