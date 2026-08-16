@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Poyo.CandyBox.HairToneMatcher.Editor
@@ -14,16 +16,16 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
 
     internal static class HairToneRegionMask
     {
-        internal static bool[] Build(Renderer renderer, int materialSlot,
+        internal static bool[] Build(IList<HairToneRendererSlot> rendererSlots,
             Color[] mainTexPixels, Color[] existingMaskPixels, Color[] userMaskPixels,
             float alphaThreshold, bool useSubmeshUv, int size,
             out HairToneMaskCounts counts)
         {
-            return Build(renderer, materialSlot, mainTexPixels, existingMaskPixels,
+            return Build(rendererSlots, mainTexPixels, existingMaskPixels,
                 userMaskPixels, alphaThreshold, useSubmeshUv, size, size, out counts);
         }
 
-        internal static bool[] Build(Renderer renderer, int materialSlot,
+        internal static bool[] Build(IList<HairToneRendererSlot> rendererSlots,
             Color[] mainTexPixels, Color[] existingMaskPixels, Color[] userMaskPixels,
             float alphaThreshold, bool useSubmeshUv, int width, int height,
             out HairToneMaskCounts counts)
@@ -31,7 +33,7 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
             int length = width * height;
             var result = new bool[length];
             bool[] uvCoverage = useSubmeshUv
-                ? BuildUvCoverage(renderer, materialSlot, width, height)
+                ? BuildUvCoverage(rendererSlots, width, height)
                 : null;
             counts = new HairToneMaskCounts { Total = length };
             for (int i = 0; i < length; i++)
@@ -125,30 +127,64 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
         private static bool[] BuildUvCoverage(Renderer renderer, int materialSlot,
             int width, int height)
         {
-            Mesh mesh = null;
-            if (renderer is SkinnedMeshRenderer skinned)
-            {
-                mesh = skinned.sharedMesh;
-            }
-            else if (renderer is MeshRenderer)
-            {
-                MeshFilter filter = renderer.GetComponent<MeshFilter>();
-                mesh = filter != null ? filter.sharedMesh : null;
-            }
-
-            if (mesh == null || materialSlot < 0 || materialSlot >= mesh.subMeshCount)
+            var coverage = new bool[width * height];
+            if (!RasterizeRendererSlot(renderer, materialSlot, coverage, width, height))
             {
                 return null;
+            }
+
+            int dilationRadius = Mathf.Max(2, Mathf.Max(width, height) / 256 * 2);
+            Dilate(coverage, width, height, dilationRadius);
+            return coverage;
+        }
+
+        private static bool[] BuildUvCoverage(
+            IList<HairToneRendererSlot> rendererSlots, int width, int height)
+        {
+            if (rendererSlots == null)
+            {
+                return null;
+            }
+
+            var coverage = new bool[width * height];
+            bool hasValidSlot = false;
+            for (int i = 0; i < rendererSlots.Count; i++)
+            {
+                HairToneRendererSlot rendererSlot = rendererSlots[i];
+                if (rendererSlot != null && RasterizeRendererSlot(
+                        rendererSlot.Renderer, rendererSlot.MaterialSlot,
+                        coverage, width, height))
+                {
+                    hasValidSlot = true;
+                }
+            }
+
+            if (!hasValidSlot)
+            {
+                return null;
+            }
+
+            int dilationRadius = Mathf.Max(2, Mathf.Max(width, height) / 256 * 2);
+            Dilate(coverage, width, height, dilationRadius);
+            return coverage;
+        }
+
+        private static bool RasterizeRendererSlot(Renderer renderer, int materialSlot,
+            bool[] coverage, int width, int height)
+        {
+            Mesh mesh = GetMesh(renderer);
+            if (mesh == null || materialSlot < 0 || materialSlot >= mesh.subMeshCount)
+            {
+                return false;
             }
 
             Vector2[] uv = mesh.uv;
             if (uv == null || uv.Length == 0)
             {
-                return null;
+                return false;
             }
 
             int[] triangles = mesh.GetTriangles(materialSlot);
-            var coverage = new bool[width * height];
             for (int i = 0; i + 2 < triangles.Length; i += 3)
             {
                 int ia = triangles[i];
@@ -166,9 +202,23 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
                 RasterizeTriangle(coverage, width, height, a, b, c);
             }
 
-            int dilationRadius = Mathf.Max(2, Mathf.Max(width, height) / 256 * 2);
-            Dilate(coverage, width, height, dilationRadius);
-            return coverage;
+            return true;
+        }
+
+        private static Mesh GetMesh(Renderer renderer)
+        {
+            if (renderer is SkinnedMeshRenderer skinned)
+            {
+                return skinned.sharedMesh;
+            }
+
+            if (renderer is MeshRenderer)
+            {
+                MeshFilter filter = renderer.GetComponent<MeshFilter>();
+                return filter != null ? filter.sharedMesh : null;
+            }
+
+            return null;
         }
 
         private static Vector2 WrapUv(Vector2 uv, int size)
@@ -231,23 +281,61 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
             bool[] source = (bool[])mask.Clone();
             for (int y = 0; y < height; y++)
             {
+                int lastOn = -radius - 1;
                 for (int x = 0; x < width; x++)
                 {
-                    if (!source[y * width + x])
+                    int index = y * width + x;
+                    if (source[index])
                     {
-                        continue;
+                        lastOn = x;
                     }
 
-                    int minY = Mathf.Max(0, y - radius);
-                    int maxY = Mathf.Min(height - 1, y + radius);
-                    int minX = Mathf.Max(0, x - radius);
-                    int maxX = Mathf.Min(width - 1, x + radius);
-                    for (int dy = minY; dy <= maxY; dy++)
+                    mask[index] = x - lastOn <= radius;
+                }
+
+                lastOn = width + radius;
+                for (int x = width - 1; x >= 0; x--)
+                {
+                    int index = y * width + x;
+                    if (source[index])
                     {
-                        for (int dx = minX; dx <= maxX; dx++)
-                        {
-                            mask[dy * width + dx] = true;
-                        }
+                        lastOn = x;
+                    }
+
+                    if (lastOn - x <= radius)
+                    {
+                        mask[index] = true;
+                    }
+                }
+            }
+
+            Array.Copy(mask, source, mask.Length);
+            for (int x = 0; x < width; x++)
+            {
+                int lastOn = -radius - 1;
+                for (int y = 0; y < height; y++)
+                {
+                    int index = y * width + x;
+                    if (source[index])
+                    {
+                        lastOn = y;
+                    }
+
+                    mask[index] = y - lastOn <= radius;
+                }
+
+                lastOn = height + radius;
+                for (int y = height - 1; y >= 0; y--)
+                {
+                    int index = y * width + x;
+                    if (source[index])
+                    {
+                        lastOn = y;
+                    }
+
+                    if (lastOn - y <= radius)
+                    {
+                        mask[index] = true;
                     }
                 }
             }

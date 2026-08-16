@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace Poyo.CandyBox.HairToneMatcher.Editor
 {
@@ -11,6 +12,7 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
         internal const int SampleSize = 256;
         private const float DefaultAlphaThreshold = 0.5f;
         private const float PreviewHeight = 220f;
+        private const float AppliedPreviewHeight = 180f;
 
         [Serializable]
         private sealed class RendererCandidate
@@ -35,8 +37,63 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
         };
         private static readonly string[] OutputModeLabels =
         {
-            "複製して差し替え", "上書き", "テクスチャを作り直す",
+            "複製 + テクスチャ焼き込み",
+            "複製して差し替え（補正は設定として保持）", "上書き",
         };
+        private static readonly string[] OutputModeHelpMessages =
+        {
+            "マテリアルとメインテクスチャをどちらも複製し、補正をテクスチャの画素へ焼き込みます。元のマテリアルとテクスチャは変更しません。シェーダーがフォールバックしても色が保たれます。焼き込んだあとは、切り替えの欄から値を編集して焼き直せます。",
+            "マテリアルを複製し、補正を設定として書き込みます。あとから値を調整できますが、シェーダーがフォールバックすると補正が反映されなくなります。",
+            "改変先のマテリアルそのものに補正を書き込みます。このマテリアルを参照している他のオブジェクトにも影響します。",
+        };
+        private static readonly HairToneOutputMode[] OutputModeOrder =
+        {
+            HairToneOutputMode.BakeTexture,
+            HairToneOutputMode.DuplicateAndReplace,
+            HairToneOutputMode.Overwrite,
+        };
+        private static readonly GUIContent AppliedSectionContent =
+            new GUIContent("反映の切り替え");
+        private static readonly GUIContent ToneAppliedContent =
+            new GUIContent("色調補正を反映");
+        private static readonly GUIContent NoCopiedPropertiesContent =
+            new GUIContent("コピーした設定はありません。");
+        private static readonly GUIContent BakedToggleHelpContent = new GUIContent(
+            "テクスチャに焼き込んだ補正は、マテリアルの設定を戻しても色が戻りません。");
+        private static readonly GUIContent RebakePendingContent = new GUIContent(
+            "編集した値は「この値で焼き直す」を押すまで反映されません。焼き直しは元に戻せません。");
+        private static readonly GUIContent RebakeContent = new GUIContent("この値で焼き直す");
+        private static readonly GUIContent GradationRebakeUnavailableContent = new GUIContent(
+            "階調マッチで焼き込んだテクスチャは焼き直せません。");
+        private static readonly GUIContent MissingBakeSourceContent = new GUIContent(
+            "元のテクスチャが見つかりません。");
+        private static readonly GUIContent AppliedPreviewContent = new GUIContent(
+            "適用時の値");
+        private static readonly GUIContent CurrentPreviewContent = new GUIContent(
+            "編集中の値");
+        private static readonly GUIContent PreviewUnavailableContent = new GUIContent(
+            "プレビューを作成できません。");
+        private static readonly GUIContent EmptyColumnHeaderContent = GUIContent.none;
+        private static readonly GUIContent SettingColumnHeaderContent = new GUIContent("設定");
+        private static readonly GUIContent PreviousValueColumnHeaderContent =
+            new GUIContent("適用前の値");
+        private static readonly GUIContent CurrentValueColumnHeaderContent =
+            new GUIContent("現在の値");
+        private static readonly GUIContent SourceValueColumnHeaderContent =
+            new GUIContent("改変元の値");
+        private static readonly GUIContent AppliedPropertyHelpContent = new GUIContent(
+            "チェックを入れると改変元の値（編集した場合は編集後の値）を使い、外すと適用前の値へ戻します。");
+        private static readonly GUIContent PropertyDiffHelpContent = new GUIContent(
+            "チェックを入れた設定を、改変元の値でコピーします。");
+        private static readonly GUIContent GroupApplyContent = new GUIContent(
+            string.Empty, "グループ内をまとめて反映 / 解除します。");
+        private static readonly GUIContent EditedMarkerContent = new GUIContent("*");
+        private static readonly GUIContent AppliedHueContent = new GUIContent("色相");
+        private static readonly GUIContent AppliedSaturationContent = new GUIContent("彩度");
+        private static readonly GUIContent AppliedValueContent = new GUIContent("明度");
+        private static readonly GUIContent AppliedGammaContent = new GUIContent("ガンマ");
+        private static readonly GUIContent ResetAdjustmentContent =
+            new GUIContent("適用時の値に戻す");
         private static readonly Color SelectedRowColor = new Color(0.22f, 0.45f, 0.75f, 0.28f);
         private static readonly Color MarkerWhite = Color.white;
         private static readonly Color MarkerBlack = Color.black;
@@ -47,8 +104,9 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
             "この位置には補正が効きません。適用範囲の内側を選んでください。";
         private const string PickerFailureMessage =
             "透明な領域のため、色を拾えませんでした。";
-        private const string BakeHelpMessage =
-            "補正を適用したテクスチャを新しく作り、マテリアルの複製へ設定します。元のテクスチャは変更しません。";
+        private const string AppliedLifetimeMessage =
+            "反映の切り替えは、このウィンドウを閉じるかスクリプトが再コンパイルされるまで有効です。";
+        private const string UndoName = "Hair Tone Matcher";
         private const string PropertyCopyHelp =
             "反映されない場合は、そのシェーダーのインスペクターで該当の機能を一度有効にしてください。";
 
@@ -68,7 +126,8 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
         [SerializeField] private HairToneSampling _sampling = HairToneSampling.Statistics;
         [SerializeField] private HairToneMethod _method = HairToneMethod.ToneAdjust;
         [SerializeField] private bool _showCorrected = true;
-        [SerializeField] private HairToneOutputMode _outputMode = HairToneOutputMode.DuplicateAndReplace;
+        [SerializeField] private HairToneOutputMode _outputMode = HairToneOutputMode.BakeTexture;
+        [SerializeField] private bool _outputModeMigrated;
         [SerializeField] private bool _writeMask;
         [SerializeField] private DefaultAsset _outputFolderAsset;
         [SerializeField] private string _outputFolderPath = string.Empty;
@@ -93,18 +152,30 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
         private string _overwriteWarning = string.Empty;
         private int _measuredTargetIndex = -1;
         private float _valueColumnWidth;
+        private float _appliedValueColumnWidth;
+        private float _appliedEditColumnWidth;
+        private readonly List<HairToneAppliedState> _appliedStates =
+            new List<HairToneAppliedState>();
 
         internal static void Open()
         {
             HairToneMatcherWindow window = GetWindow<HairToneMatcherWindow>(
                 false, "04_Hair Tone Matcher", true);
             window.titleContent = TitleContent;
-            window.minSize = new Vector2(640f, 560f);
+            window.minSize = new Vector2(700f, 720f);
             window.Show();
         }
 
         private void OnEnable()
         {
+            Undo.undoRedoPerformed -= HandleUndoRedo;
+            Undo.undoRedoPerformed += HandleUndoRedo;
+            if (!_outputModeMigrated)
+            {
+                // NOTE: 保存済みのウィンドウには以前の既定が残るため、1 度だけ新しい既定へ揃える。
+                _outputMode = HairToneOutputMode.BakeTexture;
+                _outputModeMigrated = true;
+            }
             if (_sourceInputs == null) _sourceInputs = new List<HairToneSourceInput>();
             if (_destinationRenderers == null) _destinationRenderers = new List<Renderer>();
             if (_rootCandidates == null) _rootCandidates = new List<RendererCandidate>();
@@ -117,7 +188,10 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
 
         private void OnDisable()
         {
+            Undo.undoRedoPerformed -= HandleUndoRedo;
             DestroyPreviews();
+            DestroyAppliedPreviews();
+            _appliedStates.Clear();
         }
 
         private void OnGUI()
@@ -148,6 +222,7 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
             {
                 EditorGUILayout.HelpBox(_resultSummary, MessageType.Info);
             }
+            DrawAppliedStates();
 
             EditorGUILayout.EndScrollView();
         }
@@ -517,6 +592,18 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
             if (selectAll || selectNone) SetVisibleProperties(target, selectAll);
 
             EnsureValueColumnWidth(target);
+            GUILayout.Label(
+                PropertyDiffHelpContent, EditorStyles.wordWrappedMiniLabel);
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Label(EmptyColumnHeaderContent, EditorStyles.miniBoldLabel,
+                GUILayout.Width(18f));
+            GUILayout.Label(SettingColumnHeaderContent, EditorStyles.miniBoldLabel,
+                GUILayout.ExpandWidth(true));
+            GUILayout.Label(CurrentValueColumnHeaderContent, EditorStyles.miniBoldLabel,
+                GUILayout.Width(_valueColumnWidth));
+            GUILayout.Label(SourceValueColumnHeaderContent, EditorStyles.miniBoldLabel,
+                GUILayout.Width(_valueColumnWidth));
+            EditorGUILayout.EndHorizontal();
             for (int groupIndex = 0; groupIndex < target.PropertyDiffGroups.Count; groupIndex++)
             {
                 HairTonePropertyDiffGroup group = target.PropertyDiffGroups[groupIndex];
@@ -552,7 +639,7 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
                     if (!entry.IsVisible) continue;
                     EditorGUILayout.BeginHorizontal();
                     entry.IsSelected = EditorGUILayout.Toggle(entry.IsSelected, GUILayout.Width(18f));
-                    EditorGUILayout.LabelField(entry.DisplayName, GUILayout.ExpandWidth(true));
+                    GUILayout.Label(entry.DisplayName, GUILayout.ExpandWidth(true));
                     EditorGUILayout.LabelField(entry.DestinationValueLabel,
                         GUILayout.Width(_valueColumnWidth));
                     EditorGUILayout.LabelField(entry.SourceValueLabel,
@@ -566,17 +653,19 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
         {
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("出力", EditorStyles.boldLabel);
-            HairToneOutputMode nextMode = (HairToneOutputMode)EditorGUILayout.Popup(
-                "書き込み先", (int)_outputMode, OutputModeLabels);
+            int outputModeIndex = GetOutputModeIndex(_outputMode);
+            int nextOutputModeIndex = EditorGUILayout.Popup(
+                "書き込み先", outputModeIndex, OutputModeLabels);
+            HairToneOutputMode nextMode = OutputModeOrder[nextOutputModeIndex];
             if (nextMode != _outputMode)
             {
                 _outputMode = nextMode;
                 _overwriteWarning = _outputMode == HairToneOutputMode.Overwrite && _plan != null
                     ? BuildOverwriteWarning() : string.Empty;
             }
-            if (_outputMode == HairToneOutputMode.BakeTexture)
-                EditorGUILayout.HelpBox(BakeHelpMessage, MessageType.Info);
-            else if (_outputMode == HairToneOutputMode.Overwrite && _plan != null)
+            EditorGUILayout.HelpBox(
+                OutputModeHelpMessages[nextOutputModeIndex], MessageType.Info);
+            if (_outputMode == HairToneOutputMode.Overwrite && _plan != null)
                 EditorGUILayout.HelpBox(_overwriteWarning, MessageType.Warning);
 
             _writeMask = EditorGUILayout.Toggle("マスクを書き出す", _writeMask);
@@ -607,6 +696,680 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
             if (select) OpenOutputFolder();
             if (!string.IsNullOrEmpty(_outputFolderError))
                 EditorGUILayout.HelpBox(_outputFolderError, MessageType.Warning);
+        }
+
+        private void DrawAppliedStates()
+        {
+            bool hasValidState = false;
+            for (int i = 0; i < _appliedStates.Count; i++)
+            {
+                if (_appliedStates[i] != null && _appliedStates[i].Material != null)
+                {
+                    hasValidState = true;
+                    break;
+                }
+            }
+
+            if (!hasValidState)
+            {
+                return;
+            }
+
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField(AppliedSectionContent, EditorStyles.boldLabel);
+            EditorGUILayout.HelpBox(AppliedLifetimeMessage, MessageType.Info);
+            for (int i = 0; i < _appliedStates.Count; i++)
+            {
+                HairToneAppliedState state = _appliedStates[i];
+                if (state == null || state.Material == null)
+                {
+                    continue;
+                }
+
+                EditorGUILayout.BeginHorizontal();
+                state.IsExpanded = EditorGUILayout.Foldout(
+                    state.IsExpanded, state.Header, true);
+                if (HasEditedValue(state))
+                {
+                    EditorGUILayout.LabelField(
+                        EditedMarkerContent, GUILayout.Width(12f));
+                }
+                EditorGUILayout.EndHorizontal();
+                if (!state.IsExpanded)
+                {
+                    continue;
+                }
+
+                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+                EditorGUILayout.BeginHorizontal();
+                EditorGUI.BeginDisabledGroup(state.IsBaked);
+                bool toneApplied = EditorGUILayout.Toggle(
+                    ToneAppliedContent, state.IsToneApplied);
+                EditorGUI.EndDisabledGroup();
+                EditorGUILayout.EndHorizontal();
+                if (toneApplied != state.IsToneApplied)
+                {
+                    SetToneApplied(state, toneApplied);
+                }
+
+                EditorGUI.BeginDisabledGroup(!state.IsBaked && !state.IsToneApplied);
+                DrawAdjustmentEditor(state);
+                EditorGUI.EndDisabledGroup();
+                DrawAppliedPreviews(state);
+                if (state.IsBaked)
+                {
+                    EditorGUILayout.LabelField(
+                        BakedToggleHelpContent, EditorStyles.wordWrappedMiniLabel);
+                    EditorGUILayout.LabelField(
+                        RebakePendingContent, EditorStyles.wordWrappedMiniLabel);
+                    bool rebakeUnavailable = state.IsGradationBake ||
+                        state.BakeSourceTexture == null;
+                    EditorGUI.BeginDisabledGroup(rebakeUnavailable);
+                    bool rebake = GUILayout.Button(RebakeContent);
+                    EditorGUI.EndDisabledGroup();
+                    if (state.IsGradationBake)
+                    {
+                        EditorGUILayout.LabelField(
+                            GradationRebakeUnavailableContent,
+                            EditorStyles.wordWrappedMiniLabel);
+                    }
+                    if (state.BakeSourceTexture == null)
+                    {
+                        EditorGUILayout.LabelField(
+                            MissingBakeSourceContent,
+                            EditorStyles.wordWrappedMiniLabel);
+                    }
+
+                    if (rebake)
+                    {
+                        Rebake(state);
+                    }
+                }
+
+                DrawAppliedPropertyGroups(state);
+
+                EditorGUILayout.EndVertical();
+            }
+        }
+
+        private void DrawAppliedPreviews(HairToneAppliedState state)
+        {
+            if (state.AppliedPreview == null || state.CurrentPreview == null)
+            {
+                EditorGUILayout.LabelField(
+                    PreviewUnavailableContent, EditorStyles.miniLabel);
+                return;
+            }
+
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Label(AppliedPreviewContent, EditorStyles.miniBoldLabel,
+                GUILayout.ExpandWidth(true));
+            GUILayout.Label(CurrentPreviewContent, EditorStyles.miniBoldLabel,
+                GUILayout.ExpandWidth(true));
+            EditorGUILayout.EndHorizontal();
+            Rect area = GUILayoutUtility.GetRect(
+                10f, AppliedPreviewHeight, GUILayout.ExpandWidth(true));
+            float half = (area.width - 8f) * 0.5f;
+            Rect appliedRect = area;
+            appliedRect.width = half;
+            Rect currentRect = appliedRect;
+            currentRect.x = appliedRect.xMax + 8f;
+            if (Event.current.type == EventType.Repaint)
+            {
+                GUI.DrawTexture(appliedRect, state.AppliedPreview,
+                    ScaleMode.ScaleToFit, false);
+                GUI.DrawTexture(currentRect, state.CurrentPreview,
+                    ScaleMode.ScaleToFit, false);
+            }
+        }
+
+        private void DrawAppliedPropertyGroups(HairToneAppliedState state)
+        {
+            if (state.PropertyGroups == null || state.PropertyGroups.Count == 0)
+            {
+                EditorGUILayout.LabelField(
+                    NoCopiedPropertiesContent, EditorStyles.miniLabel);
+                return;
+            }
+
+            GUILayout.Label(
+                AppliedPropertyHelpContent, EditorStyles.wordWrappedMiniLabel);
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Label(EmptyColumnHeaderContent, EditorStyles.miniBoldLabel,
+                GUILayout.Width(18f));
+            GUILayout.Label(SettingColumnHeaderContent, EditorStyles.miniBoldLabel,
+                GUILayout.ExpandWidth(true));
+            GUILayout.Label(PreviousValueColumnHeaderContent, EditorStyles.miniBoldLabel,
+                GUILayout.Width(_appliedValueColumnWidth));
+            GUILayout.Label(SourceValueColumnHeaderContent, EditorStyles.miniBoldLabel,
+                GUILayout.Width(_appliedValueColumnWidth));
+            GUILayout.Label(CurrentValueColumnHeaderContent, EditorStyles.miniBoldLabel,
+                GUILayout.Width(_appliedEditColumnWidth));
+            EditorGUILayout.EndHorizontal();
+
+            for (int groupIndex = 0;
+                groupIndex < state.PropertyGroups.Count; groupIndex++)
+            {
+                HairTonePropertyRecordGroup group = state.PropertyGroups[groupIndex];
+                bool anyApplied = false;
+                bool allApplied = true;
+                for (int i = 0; i < group.Entries.Count; i++)
+                {
+                    anyApplied |= group.Entries[i].IsApplied;
+                    allApplied &= group.Entries[i].IsApplied;
+                }
+
+                EditorGUILayout.BeginHorizontal();
+                group.IsExpanded = EditorGUILayout.Foldout(
+                    group.IsExpanded, group.Header, true);
+                EditorGUI.showMixedValue = anyApplied && !allApplied;
+                EditorGUI.BeginChangeCheck();
+                bool groupApplied = GUILayout.Toggle(
+                    allApplied, GroupApplyContent, GUILayout.Width(18f));
+                bool groupChanged = EditorGUI.EndChangeCheck();
+                EditorGUI.showMixedValue = false;
+                EditorGUILayout.EndHorizontal();
+                if (groupChanged)
+                {
+                    SetPropertyGroupApplied(state, group, groupApplied);
+                }
+
+                if (!group.IsExpanded)
+                {
+                    continue;
+                }
+
+                for (int propertyIndex = 0;
+                    propertyIndex < group.Entries.Count; propertyIndex++)
+                {
+                    HairTonePropertyRecord record = group.Entries[propertyIndex];
+                    EditorGUILayout.BeginHorizontal();
+                    bool propertyApplied = EditorGUILayout.Toggle(
+                        record.IsApplied, GUILayout.Width(18f));
+                    GUILayout.Label(
+                        record.RowContent, GUILayout.ExpandWidth(true));
+                    EditorGUILayout.LabelField(record.PreviousValueLabel,
+                        GUILayout.Width(_appliedValueColumnWidth));
+                    EditorGUILayout.LabelField(record.SourceValueLabel,
+                        GUILayout.Width(_appliedValueColumnWidth));
+                    if (propertyApplied != record.IsApplied)
+                    {
+                        SetPropertyApplied(state, record, propertyApplied);
+                    }
+
+                    DrawPropertyEditor(state, record);
+                    EditorGUILayout.EndHorizontal();
+                }
+            }
+        }
+
+        private static bool HasEditedValue(HairToneAppliedState state)
+        {
+            if (state.IsAdjustmentEdited)
+            {
+                return true;
+            }
+
+            if (state.PropertyGroups == null)
+            {
+                return false;
+            }
+
+            for (int groupIndex = 0;
+                groupIndex < state.PropertyGroups.Count; groupIndex++)
+            {
+                List<HairTonePropertyRecord> entries =
+                    state.PropertyGroups[groupIndex].Entries;
+                for (int i = 0; i < entries.Count; i++)
+                {
+                    if (entries[i] != null && entries[i].IsEdited)
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private void DrawAdjustmentEditor(HairToneAppliedState state)
+        {
+            HairToneAdjustment adjustment = state.CurrentAdjustment;
+            EditorGUI.BeginChangeCheck();
+            adjustment.Hue = EditorGUILayout.Slider(
+                AppliedHueContent, adjustment.Hue, -0.5f, 0.5f);
+            adjustment.Saturation = EditorGUILayout.Slider(
+                AppliedSaturationContent, adjustment.Saturation, 0f, 3f);
+            adjustment.Value = EditorGUILayout.Slider(
+                AppliedValueContent, adjustment.Value, 0f, 3f);
+            adjustment.Gamma = EditorGUILayout.Slider(
+                AppliedGammaContent, adjustment.Gamma, 0.1f, 3f);
+            bool changed = EditorGUI.EndChangeCheck();
+            if (changed)
+            {
+                state.CurrentAdjustment = adjustment;
+                state.IsAdjustmentEdited = !AdjustmentsEqual(
+                    adjustment, state.AppliedAdjustment);
+                state.CurrentPreview = BuildAppliedPreview(
+                    state, adjustment, state.CurrentPreview);
+                if (!state.IsBaked)
+                {
+                    Undo.RecordObject(state.Material, UndoName);
+                    WriteToneState(state);
+                    EditorUtility.SetDirty(state.Material);
+                }
+            }
+
+            if (GUILayout.Button(ResetAdjustmentContent))
+            {
+                state.CurrentAdjustment = state.AppliedAdjustment;
+                state.IsAdjustmentEdited = false;
+                state.CurrentPreview = BuildAppliedPreview(
+                    state, state.CurrentAdjustment, state.CurrentPreview);
+                if (!state.IsBaked)
+                {
+                    Undo.RecordObject(state.Material, UndoName);
+                    WriteToneState(state);
+                    EditorUtility.SetDirty(state.Material);
+                }
+            }
+        }
+
+        private static Texture2D BuildAppliedPreview(HairToneAppliedState state,
+            HairToneAdjustment adjustment, Texture2D existing)
+        {
+            int pixelCount = SampleSize * SampleSize;
+            if (state == null || state.PreviewPixels == null ||
+                state.PreviewMask == null ||
+                state.PreviewPixels.Length < pixelCount ||
+                state.PreviewMask.Length < pixelCount)
+            {
+                if (existing != null)
+                {
+                    DestroyImmediate(existing);
+                }
+
+                return null;
+            }
+
+            if (state.PreviewBuffer == null ||
+                state.PreviewBuffer.Length != pixelCount)
+            {
+                state.PreviewBuffer = new Color[pixelCount];
+            }
+
+            for (int i = 0; i < pixelCount; i++)
+            {
+                Color color = state.PreviewPixels[i];
+                if (state.PreviewMask[i])
+                {
+                    color = HairToneShaderProfile.ApplyToPixel(
+                        color, adjustment, state.Profile);
+                }
+
+                state.PreviewBuffer[i] = HairToneShaderProfile.MultiplyMainColor(
+                    color, state.PreviewMainColor);
+            }
+
+            if (existing == null || existing.width != SampleSize ||
+                existing.height != SampleSize)
+            {
+                if (existing != null)
+                {
+                    DestroyImmediate(existing);
+                }
+
+                existing = new Texture2D(
+                    SampleSize, SampleSize, TextureFormat.RGBA32, false)
+                {
+                    hideFlags = HideFlags.HideAndDontSave,
+                };
+            }
+
+            existing.SetPixels(state.PreviewBuffer);
+            existing.Apply(false, false);
+            return existing;
+        }
+
+        private void Rebake(HairToneAppliedState state)
+        {
+            try
+            {
+                HairToneMatcherApplier.Rebake(
+                    state, state.CurrentAdjustment, out int bakedPixelCount,
+                    out int width, out int height);
+                state.AppliedAdjustment = state.CurrentAdjustment;
+                state.IsAdjustmentEdited = false;
+                state.AppliedPreview = BuildAppliedPreview(
+                    state, state.AppliedAdjustment, state.AppliedPreview);
+                _resultSummary = string.Format(
+                    "{0}: 焼き直し成功\n  テクスチャ: {1}\n  {2}x{3} のうち {4} 画素を補正しました。\n焼き直しは元に戻せません。",
+                    state.Header, state.BakedTexturePath, width, height,
+                    bakedPixelCount);
+            }
+            catch (Exception exception)
+            {
+                _resultSummary = string.Format(
+                    "{0}: 焼き直し失敗 — {1}", state.Header, exception.Message);
+                Debug.LogException(exception);
+            }
+
+            Repaint();
+        }
+
+        private void DrawPropertyEditor(
+            HairToneAppliedState state, HairTonePropertyRecord record)
+        {
+            if (record.Type == ShaderPropertyType.Texture)
+            {
+                return;
+            }
+
+            bool changed = false;
+            EditorGUI.BeginDisabledGroup(!record.IsApplied);
+            switch (record.Type)
+            {
+                case ShaderPropertyType.Color:
+                    EditorGUI.BeginChangeCheck();
+                    Color color = EditorGUILayout.ColorField(
+                        record.CurrentColor, GUILayout.Width(_appliedEditColumnWidth));
+                    changed = EditorGUI.EndChangeCheck();
+                    if (changed)
+                    {
+                        record.CurrentColor = color;
+                    }
+                    break;
+                case ShaderPropertyType.Float:
+                case ShaderPropertyType.Range:
+                    EditorGUI.BeginChangeCheck();
+                    float floatValue = EditorGUILayout.FloatField(
+                        record.CurrentFloat, GUILayout.Width(_appliedEditColumnWidth));
+                    changed = EditorGUI.EndChangeCheck();
+                    if (changed)
+                    {
+                        record.CurrentFloat = floatValue;
+                    }
+                    break;
+                case ShaderPropertyType.Vector:
+                    Vector4 vector = record.CurrentVector;
+                    EditorGUILayout.BeginHorizontal(
+                        GUILayout.Width(_appliedEditColumnWidth));
+                    EditorGUI.BeginChangeCheck();
+                    vector.x = EditorGUILayout.FloatField(vector.x);
+                    vector.y = EditorGUILayout.FloatField(vector.y);
+                    vector.z = EditorGUILayout.FloatField(vector.z);
+                    vector.w = EditorGUILayout.FloatField(vector.w);
+                    changed = EditorGUI.EndChangeCheck();
+                    EditorGUILayout.EndHorizontal();
+                    if (changed)
+                    {
+                        record.CurrentVector = vector;
+                    }
+                    break;
+            }
+            EditorGUI.EndDisabledGroup();
+
+            if (changed)
+            {
+                Undo.RecordObject(state.Material, UndoName);
+                record.IsEdited = !RecordMatchesSource(record);
+                WriteCurrentRecord(state.Material, record);
+                EditorUtility.SetDirty(state.Material);
+            }
+        }
+
+        private void MeasureAppliedColumnWidths()
+        {
+            _appliedValueColumnWidth = 60f;
+            GUIStyle style = EditorStyles.label;
+            for (int stateIndex = 0; stateIndex < _appliedStates.Count; stateIndex++)
+            {
+                HairToneAppliedState state = _appliedStates[stateIndex];
+                if (state == null || state.PropertyGroups == null)
+                {
+                    continue;
+                }
+
+                for (int groupIndex = 0;
+                    groupIndex < state.PropertyGroups.Count; groupIndex++)
+                {
+                    List<HairTonePropertyRecord> entries =
+                        state.PropertyGroups[groupIndex].Entries;
+                    for (int propertyIndex = 0;
+                        propertyIndex < entries.Count; propertyIndex++)
+                    {
+                        HairTonePropertyRecord record = entries[propertyIndex];
+                        MeasureContent.text = record.PreviousValueLabel;
+                        float previousWidth = style.CalcSize(MeasureContent).x + 8f;
+                        MeasureContent.text = record.SourceValueLabel;
+                        float sourceWidth = style.CalcSize(MeasureContent).x + 8f;
+                        _appliedValueColumnWidth = Mathf.Max(
+                            _appliedValueColumnWidth, previousWidth, sourceWidth);
+                    }
+                }
+            }
+
+            _appliedValueColumnWidth = Mathf.Min(_appliedValueColumnWidth, 210f);
+            _appliedEditColumnWidth = _appliedValueColumnWidth;
+        }
+
+        private static void SetToneApplied(HairToneAppliedState state, bool applied)
+        {
+            Undo.RecordObject(state.Material, UndoName);
+            if (applied)
+            {
+                WriteToneState(state);
+            }
+            else
+            {
+                HairToneShaderProfile.RestoreState(
+                    state.Material, state.PreviousState);
+            }
+
+            state.IsToneApplied = applied;
+            EditorUtility.SetDirty(state.Material);
+        }
+
+        private static void SetPropertyApplied(HairToneAppliedState state,
+            HairTonePropertyRecord record, bool applied)
+        {
+            Undo.RecordObject(state.Material, UndoName);
+            HairTonePropertyDiff.WriteRecord(state.Material, record, applied);
+            record.IsApplied = applied;
+            EditorUtility.SetDirty(state.Material);
+        }
+
+        private static void SetPropertyGroupApplied(HairToneAppliedState state,
+            HairTonePropertyRecordGroup group, bool applied)
+        {
+            Undo.RecordObject(state.Material, UndoName);
+            for (int i = 0; i < group.Entries.Count; i++)
+            {
+                HairTonePropertyRecord record = group.Entries[i];
+                HairTonePropertyDiff.WriteRecord(state.Material, record, applied);
+                record.IsApplied = applied;
+            }
+
+            EditorUtility.SetDirty(state.Material);
+        }
+
+        private static void WriteToneState(HairToneAppliedState state)
+        {
+            HairToneShaderProfile.Write(
+                state.Material, state.Profile, state.CurrentAdjustment,
+                state.UseGradation);
+            if (!state.UseGradation || state.GradationLut == null)
+            {
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(state.Profile.GradationTexProperty) &&
+                state.Material.HasProperty(state.Profile.GradationTexProperty))
+            {
+                state.Material.SetTexture(
+                    state.Profile.GradationTexProperty, state.GradationLut);
+            }
+
+            if (!string.IsNullOrEmpty(state.Profile.GradationStrengthProperty) &&
+                state.Material.HasProperty(state.Profile.GradationStrengthProperty))
+            {
+                state.Material.SetFloat(
+                    state.Profile.GradationStrengthProperty, 1f);
+            }
+        }
+
+        private static void WriteCurrentRecord(
+            Material material, HairTonePropertyRecord record)
+        {
+            if (material == null || record == null ||
+                string.IsNullOrEmpty(record.Name) || !material.HasProperty(record.Name))
+            {
+                return;
+            }
+
+            switch (record.Type)
+            {
+                case ShaderPropertyType.Color:
+                    material.SetColor(record.Name, record.CurrentColor);
+                    break;
+                case ShaderPropertyType.Float:
+                case ShaderPropertyType.Range:
+                    material.SetFloat(record.Name, record.CurrentFloat);
+                    break;
+                case ShaderPropertyType.Vector:
+                    material.SetVector(record.Name, record.CurrentVector);
+                    break;
+                case ShaderPropertyType.Texture:
+                    material.SetTexture(record.Name, record.SourceTexture);
+                    break;
+            }
+        }
+
+        private void HandleUndoRedo()
+        {
+            for (int stateIndex = 0; stateIndex < _appliedStates.Count; stateIndex++)
+            {
+                HairToneAppliedState state = _appliedStates[stateIndex];
+                if (state == null || state.Material == null)
+                {
+                    continue;
+                }
+
+                if (!state.IsBaked)
+                {
+                    HairToneAdjustment adjustment = HairToneShaderProfile.Read(
+                        state.Material, state.Profile);
+                    state.CurrentAdjustment = adjustment;
+                    state.IsToneApplied = !IsNeutral(adjustment);
+                    state.IsAdjustmentEdited = !AdjustmentsEqual(
+                        adjustment, state.AppliedAdjustment);
+                    state.CurrentPreview = BuildAppliedPreview(
+                        state, adjustment, state.CurrentPreview);
+                }
+                if (state.PropertyGroups == null)
+                {
+                    continue;
+                }
+
+                for (int groupIndex = 0;
+                    groupIndex < state.PropertyGroups.Count; groupIndex++)
+                {
+                    List<HairTonePropertyRecord> entries =
+                        state.PropertyGroups[groupIndex].Entries;
+                    for (int propertyIndex = 0;
+                        propertyIndex < entries.Count; propertyIndex++)
+                    {
+                        SyncPropertyRecord(
+                            state.Material, entries[propertyIndex]);
+                    }
+                }
+            }
+
+            Repaint();
+        }
+
+        private static void SyncPropertyRecord(
+            Material material, HairTonePropertyRecord record)
+        {
+            if (record == null || string.IsNullOrEmpty(record.Name) ||
+                !material.HasProperty(record.Name))
+            {
+                return;
+            }
+
+            bool matchesSource;
+            bool matchesPrevious;
+            switch (record.Type)
+            {
+                case ShaderPropertyType.Color:
+                    record.CurrentColor = material.GetColor(record.Name);
+                    matchesSource = record.CurrentColor == record.SourceColor;
+                    matchesPrevious = record.CurrentColor == record.PreviousColor;
+                    break;
+                case ShaderPropertyType.Float:
+                case ShaderPropertyType.Range:
+                    record.CurrentFloat = material.GetFloat(record.Name);
+                    matchesSource = Mathf.Approximately(
+                        record.CurrentFloat, record.SourceFloat);
+                    matchesPrevious = Mathf.Approximately(
+                        record.CurrentFloat, record.PreviousFloat);
+                    break;
+                case ShaderPropertyType.Vector:
+                    record.CurrentVector = material.GetVector(record.Name);
+                    matchesSource = record.CurrentVector == record.SourceVector;
+                    matchesPrevious = record.CurrentVector == record.PreviousVector;
+                    break;
+                case ShaderPropertyType.Texture:
+                    Texture currentTexture = material.GetTexture(record.Name);
+                    matchesSource = currentTexture == record.SourceTexture;
+                    matchesPrevious = currentTexture == record.PreviousTexture;
+                    break;
+                default:
+                    return;
+            }
+
+            if (matchesSource)
+            {
+                record.IsApplied = true;
+                record.IsEdited = false;
+            }
+            else if (matchesPrevious)
+            {
+                record.IsApplied = false;
+                record.IsEdited = false;
+            }
+            else
+            {
+                record.IsEdited = true;
+            }
+        }
+
+        private static bool RecordMatchesSource(HairTonePropertyRecord record)
+        {
+            switch (record.Type)
+            {
+                case ShaderPropertyType.Color:
+                    return record.CurrentColor == record.SourceColor;
+                case ShaderPropertyType.Float:
+                case ShaderPropertyType.Range:
+                    return Mathf.Approximately(
+                        record.CurrentFloat, record.SourceFloat);
+                case ShaderPropertyType.Vector:
+                    return record.CurrentVector == record.SourceVector;
+                case ShaderPropertyType.Texture:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static bool AdjustmentsEqual(
+            HairToneAdjustment left, HairToneAdjustment right)
+        {
+            return Mathf.Approximately(left.Hue, right.Hue) &&
+                Mathf.Approximately(left.Saturation, right.Saturation) &&
+                Mathf.Approximately(left.Value, right.Value) &&
+                Mathf.Approximately(left.Gamma, right.Gamma);
         }
 
         private void Scan()
@@ -827,9 +1590,8 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
                     target.Material.GetTexture(target.Profile.RegionMaskProperty), SampleSize);
             }
 
-            HairToneRendererSlot representative = target.RendererSlots[0];
             target.DestinationMask = HairToneRegionMask.Build(
-                representative.Renderer, representative.MaterialSlot, target.Pixels,
+                target.RendererSlots, target.Pixels,
                 existingMask, HairTonePixelSampler.Read(_userMask, SampleSize),
                 _alphaThreshold, _useSubmeshUv, SampleSize, out target.MaskCounts);
             if (!HairToneStatistics.TryCompute(target.Pixels, target.DestinationMask,
@@ -866,10 +1628,30 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
 
         private void Apply()
         {
+            DestroyAppliedPreviews();
+            _appliedStates.Clear();
             List<HairToneApplyResult> results = HairToneMatcherApplier.Apply(
                 _plan, _method, _outputMode, _outputFolderPath, _writeMask);
+            for (int i = 0; i < results.Count; i++)
+            {
+                if (results[i].AppliedState != null)
+                {
+                    InitializeAppliedPreviews(results[i].AppliedState);
+                    _appliedStates.Add(results[i].AppliedState);
+                }
+            }
+
+            MeasureAppliedColumnWidths();
             _resultSummary = BuildResultSummary(results);
             InvalidatePlan(false);
+        }
+
+        private static void InitializeAppliedPreviews(HairToneAppliedState state)
+        {
+            state.AppliedPreview = BuildAppliedPreview(
+                state, state.AppliedAdjustment, state.AppliedPreview);
+            state.CurrentPreview = BuildAppliedPreview(
+                state, state.CurrentAdjustment, state.CurrentPreview);
         }
 
         private string GetScanBlockedReason()
@@ -905,6 +1687,19 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
             if (NeedsOutputFolder() && !IsWritableOutputFolder(_outputFolderPath))
                 return "出力フォルダを指定してください。";
             return null;
+        }
+
+        private static int GetOutputModeIndex(HairToneOutputMode outputMode)
+        {
+            for (int i = 0; i < OutputModeOrder.Length; i++)
+            {
+                if (OutputModeOrder[i] == outputMode)
+                {
+                    return i;
+                }
+            }
+
+            return 0;
         }
 
         private bool CanUseGradation(HairToneTarget target)
@@ -1171,6 +1966,22 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
             DestroyPreview(ref _destinationPreview);
             DestroyPreview(ref _rawDestinationPreview);
             DestroyPreview(ref _gradationPreviewLut);
+        }
+
+        private void DestroyAppliedPreviews()
+        {
+            for (int i = 0; i < _appliedStates.Count; i++)
+            {
+                HairToneAppliedState state = _appliedStates[i];
+                if (state == null)
+                {
+                    continue;
+                }
+
+                DestroyPreview(ref state.AppliedPreview);
+                DestroyPreview(ref state.CurrentPreview);
+                state.PreviewBuffer = null;
+            }
         }
 
         private static void DestroyPreview(ref Texture2D texture)
@@ -1630,9 +2441,23 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
                 }
 
                 succeeded++;
-                string path = !string.IsNullOrEmpty(result.TexturePath)
-                    ? result.TexturePath : result.MaterialPath;
-                lines.Add(result.TargetLabel + ": 成功 — " + path);
+                lines.Add(result.TargetLabel + ": 成功");
+                lines.Add("  マテリアル: " + result.MaterialPath);
+                if (!string.IsNullOrEmpty(result.TexturePath))
+                {
+                    lines.Add("  テクスチャ: " + result.TexturePath);
+                    lines.Add(string.Format(
+                        "  {0}x{1} のうち {2} 画素を補正しました。",
+                        result.BakedWidth, result.BakedHeight, result.BakedPixelCount));
+                }
+                if (!string.IsNullOrEmpty(result.LutPath))
+                {
+                    lines.Add("  階調 LUT: " + result.LutPath);
+                }
+                if (!string.IsNullOrEmpty(result.MaskPath))
+                {
+                    lines.Add("  マスク: " + result.MaskPath);
+                }
             }
 
             lines.Add(string.Format("成功 {0} 件 / 失敗 {1} 件", succeeded, failed));
