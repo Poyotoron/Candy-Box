@@ -86,6 +86,11 @@ AAO Merge PhysBone の override として書き込みます。カーブにも対
 どのボーンを親へ統合するかをチェックボックスでまとめて切り替えます。
 ボーンチェーンを一定間隔で間引く設定も自動で作れます。";
 
+        private static readonly string HairToneMatcherDescription =
+            @"髪を差し替えたときに生じる色味の差を埋めます。
+元の髪と新しい髪のテクスチャの色を比べ、新しい髪を元の髪に寄せる補正値を提案します。
+lilToon と Poiyomi のマテリアルに対応します。導入は必須ではありません。";
+
         internal static readonly CandyBoxToolEntry[] Tools =
         {
             new CandyBoxToolEntry(
@@ -114,6 +119,11 @@ AAO Merge PhysBone の override として書き込みます。カーブにも対
                 AaoMergeBoneHelperDescription,
                 AvatarOptimizerRequirement,
                 AvatarOptimizerAvailable),
+            new CandyBoxToolEntry(
+                "04",
+                "04_Hair Tone Matcher",
+                "差し替えた髪の色味を、元の髪に合わせます",
+                HairToneMatcherDescription),
         };
 
         internal static CandyBoxToolEntry Find(string id)
