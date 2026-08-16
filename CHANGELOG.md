@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.5.1] - 2026-08-16
+
+### Added
+
+- Toggles that turn the applied tone adjustment and each copied material setting on and off after applying, with direct editing of their values.
+- A before/after texture preview of the pending edit.
+- Re-baking of the generated texture from the edited values.
+
+### Changed
+
+- The default output creates a duplicated material and bakes the adjustment into a new texture, so the match survives a shader fallback.
+- Copied material settings are grouped by feature, and value columns are labelled.
+- Windows open at a larger size, and the settings window keeps its actions visible.
+
+### Fixed
+
+- The applied region now covers every renderer that shares the material, so the whole hair is adjusted.
+- Semi-transparent strands are no longer left at their original color when baking.
+
 ## [0.5.0] - 2026-08-16
 
 ### Added
