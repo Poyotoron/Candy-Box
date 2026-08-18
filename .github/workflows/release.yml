@@ -6,6 +6,8 @@ name: Build Release
 # VPM リスティングは Release に添付された package.json の url を辿る。
 # ※ リリース前に package.json の version と url が一致していること（url は
 #   releases/download/<version>/<name>-<version>.zip を指す）。
+# ※ Release の説明欄は .github/release-notes/<version>.md を使う。
+#   ファイルが無い場合はビルドを失敗させ、説明の無い Release を作らせない。
 on:
   workflow_dispatch:
 
@@ -39,6 +41,15 @@ jobs:
           echo "unityPackage=${{ runner.temp }}/${{ steps.pkgName.outputs.value }}-${{ steps.version.outputs.value }}.unitypackage" >> $GITHUB_ENV
           echo "metaList=${{ runner.temp }}/metaList" >> $GITHUB_ENV
           echo "version=${{ steps.version.outputs.value }}" >> $GITHUB_ENV
+          echo "releaseNotes=.github/release-notes/${{ steps.version.outputs.value }}.md" >> $GITHUB_ENV
+
+      # 説明欄の無い Release を作らないよう、ノートの有無を先に確かめる
+      - name: Check Release Notes
+        run: |
+          if [ ! -s "${{ env.releaseNotes }}" ]; then
+            echo "Release notes not found: ${{ env.releaseNotes }}" >&2
+            exit 1
+          fi
 
       # パッケージ本体を zip 化する。ドットで始まるフォルダは開発用なので配布物に含めない。
       - name: Create Package Zip
@@ -70,3 +81,4 @@ jobs:
             ${{ env.unityPackage }}
             package.json
           tag_name: ${{ env.version }}
+          body_path: ${{ env.releaseNotes }}
