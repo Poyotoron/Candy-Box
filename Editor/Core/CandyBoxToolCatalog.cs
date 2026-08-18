@@ -91,6 +91,11 @@ AAO Merge PhysBone の override として書き込みます。カーブにも対
 元の髪と新しい髪のテクスチャの色を比べ、新しい髪を元の髪に寄せる補正値を提案します。
 lilToon と Poiyomi のマテリアルに対応します。導入は必須ではありません。";
 
+        private static readonly string BoneWeightCollapserDescription =
+            @"指定したボーンのウェイトを、別のボーンへまとめて移します。
+袖が指ボーンに引きずられて変形する、といった追従の問題を解消するためのツールです。
+結果は新しいメッシュとして保存し、元のメッシュには書き込みません。";
+
         internal static readonly CandyBoxToolEntry[] Tools =
         {
             new CandyBoxToolEntry(
@@ -124,6 +129,11 @@ lilToon と Poiyomi のマテリアルに対応します。導入は必須では
                 "04_Hair Tone Matcher",
                 "差し替えた髪の色味を、元の髪に合わせます",
                 HairToneMatcherDescription),
+            new CandyBoxToolEntry(
+                "05",
+                "05_Bone Weight Collapser",
+                "不要なボーンのウェイトを、別のボーンへ寄せます",
+                BoneWeightCollapserDescription),
         };
 
         internal static CandyBoxToolEntry Find(string id)
