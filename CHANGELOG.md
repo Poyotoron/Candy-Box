@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.6.0] - 2026-08-18
+
+### Added
+
+- Bone Weight Collapser to move bone weights from selected bones onto another bone.
+- Source bones can be listed directly or collected from the descendants of a bone.
+- A dry run that reports affected vertices and the total weight to be moved, per mesh.
+- A blend ratio for moving only part of the weight.
+- Baked meshes are saved as new assets, leaving the original mesh untouched, and the renderer can be reverted to its previous mesh.
+
 ## [0.5.1] - 2026-08-16
 
 ### Added
