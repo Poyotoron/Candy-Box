@@ -1,7 +1,7 @@
 {
   "name": "net.maaaaa.candy-box",
   "displayName": "Candy Box",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "アバター改変向けの小さなエディタ拡張をまとめたパッケージです。使うツールだけを有効にできます。",
   "unity": "2022.3",
   "license": "MIT",
@@ -9,7 +9,7 @@
     "name": "Poyotoron",
     "url": "https://github.com/Poyotoron"
   },
-  "url": "https://github.com/Poyotoron/Candy-Box/releases/download/0.5.1/net.maaaaa.candy-box-0.5.1.zip",
+  "url": "https://github.com/Poyotoron/Candy-Box/releases/download/0.6.0/net.maaaaa.candy-box-0.6.0.zip",
   "documentationUrl": "https://ghp.maaaaa.net/Candy-Box/",
   "changelogUrl": "https://github.com/Poyotoron/Candy-Box/blob/main/CHANGELOG.md"
 }
