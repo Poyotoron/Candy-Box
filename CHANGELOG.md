@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.1] - 2026-08-18
+
+### Added
+
+- Multiple collapse rules in Bone Weight Collapser, each with its own source bones, destination bone and blend ratio, applied in order in a single run.
+- Duplicating and reordering rules.
+
+### Changed
+
+- Meshes are collected as soon as a target object is set, without pressing a button.
+- One mesh asset is written per renderer regardless of how many rules are applied.
+
 ## [0.6.0] - 2026-08-18
 
 ### Added
