@@ -11,6 +11,7 @@ namespace Poyo.CandyBox.BoneWeightCollapser.Editor
         private sealed class SharedBake
         {
             internal Transform[] BoneOrder;
+            internal int[] AppliedRuleNumbers;
             internal Mesh BakedMesh;
             internal string OutputPath;
         }
@@ -55,7 +56,6 @@ namespace Poyo.CandyBox.BoneWeightCollapser.Editor
                     {
                         ApplyTarget(
                             target,
-                            plan.BlendRatio,
                             plan.Normalize,
                             outputFolderPath,
                             suffix,
@@ -128,7 +128,6 @@ namespace Poyo.CandyBox.BoneWeightCollapser.Editor
 
         private static void ApplyTarget(
             BoneWeightCollapseTarget target,
-            float blendRatio,
             bool normalize,
             string outputFolderPath,
             string suffix,
@@ -143,24 +142,44 @@ namespace Poyo.CandyBox.BoneWeightCollapser.Editor
                     "走査後にメッシュが変更されました。もう一度影響を確認してください。");
             }
 
+            var applicableRules = new List<BoneWeightTargetRule>();
+            for (int ruleIndex = 0; ruleIndex < target.Rules.Count; ruleIndex++)
+            {
+                BoneWeightTargetRule targetRule = target.Rules[ruleIndex];
+                if (targetRule.IsApplicable)
+                {
+                    // NOTE: ルールの並びが処理順なので、走査結果の順にそのまま集める。
+                    applicableRules.Add(targetRule);
+                }
+            }
+
+            int[] appliedRuleNumbers = new int[applicableRules.Count];
+            for (int ruleIndex = 0; ruleIndex < applicableRules.Count; ruleIndex++)
+            {
+                appliedRuleNumbers[ruleIndex] = applicableRules[ruleIndex].Rule.Number;
+            }
+
             Transform[] boneOrder = renderer.bones;
-            SharedBake shared = FindSharedBake(sharedBakes, source, boneOrder);
+            SharedBake shared = FindSharedBake(
+                sharedBakes, source, boneOrder, appliedRuleNumbers);
             bool reused = shared != null;
+            int affectedVertexCount = target.AffectedVertexCount;
             if (!reused)
             {
-                Mesh baked = BoneWeightCollapserBaker.Bake(
+                bool succeeded = BoneWeightCollapserBaker.Collapse(
                     source,
-                    target.SourceBoneIndices,
-                    target.DestinationBoneIndex,
-                    blendRatio,
+                    applicableRules,
                     normalize,
-                    out int ignoredAffectedVertexCount,
-                    out float ignoredMovedWeight);
-                if (baked == null)
+                    true,
+                    out Mesh baked,
+                    out BoneWeightCollapseStats stats);
+                if (!succeeded || baked == null)
                 {
                     throw new InvalidOperationException(
                         "新しいメッシュを作成できませんでした。");
                 }
+
+                affectedVertexCount = stats.AffectedVertexCount;
 
                 string desiredPath = outputFolderPath.TrimEnd('/') + "/" +
                     source.name + suffix + ".asset";
@@ -179,6 +198,7 @@ namespace Poyo.CandyBox.BoneWeightCollapser.Editor
                 shared = new SharedBake
                 {
                     BoneOrder = boneOrder,
+                    AppliedRuleNumbers = appliedRuleNumbers,
                     BakedMesh = baked,
                     OutputPath = path,
                 };
@@ -210,7 +230,7 @@ namespace Poyo.CandyBox.BoneWeightCollapser.Editor
                     ? "{0}  影響 {1} 頂点  →  {2}（共有）"
                     : "{0}  影響 {1} 頂点  →  {2}",
                 target.PathLabel,
-                target.AffectedVertexCount,
+                affectedVertexCount,
                 shared.OutputPath);
             result.Lines.Add(target.ResultLabel);
             result.AppliedCount++;
@@ -219,7 +239,8 @@ namespace Poyo.CandyBox.BoneWeightCollapser.Editor
         private static SharedBake FindSharedBake(
             Dictionary<Mesh, List<SharedBake>> sharedBakes,
             Mesh source,
-            Transform[] boneOrder)
+            Transform[] boneOrder,
+            int[] appliedRuleNumbers)
         {
             if (!sharedBakes.TryGetValue(source, out List<SharedBake> candidates))
             {
@@ -231,9 +252,11 @@ namespace Poyo.CandyBox.BoneWeightCollapser.Editor
                  candidateIndex++)
             {
                 SharedBake candidate = candidates[candidateIndex];
-                // NOTE: 同じ Mesh でも bones の並びが違うとインデックスの意味が変わり、
-                // 別のボーンへウェイトが乗るため、並びまで一致する場合だけ共有する。
-                if (HasSameBoneOrder(candidate.BoneOrder, boneOrder))
+                // NOTE: bones の並びか適用ルールが違えば結果も変わるため、
+                // 両方が同じ対象だけで生成メッシュを共有する。
+                if (HasSameBoneOrder(candidate.BoneOrder, boneOrder) &&
+                    HasSameRuleOrder(
+                        candidate.AppliedRuleNumbers, appliedRuleNumbers))
                 {
                     return candidate;
                 }
@@ -252,6 +275,24 @@ namespace Poyo.CandyBox.BoneWeightCollapser.Editor
             for (int boneIndex = 0; boneIndex < first.Length; boneIndex++)
             {
                 if (first[boneIndex] != second[boneIndex])
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool HasSameRuleOrder(int[] first, int[] second)
+        {
+            if (first == null || second == null || first.Length != second.Length)
+            {
+                return false;
+            }
+
+            for (int ruleIndex = 0; ruleIndex < first.Length; ruleIndex++)
+            {
+                if (first[ruleIndex] != second[ruleIndex])
                 {
                     return false;
                 }

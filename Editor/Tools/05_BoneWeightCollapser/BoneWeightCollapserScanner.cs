@@ -8,9 +8,20 @@ namespace Poyo.CandyBox.BoneWeightCollapser.Editor
 {
     internal static class BoneWeightCollapserScanner
     {
+        private static readonly List<BoneWeightTargetRule> ApplicableRules =
+            new List<BoneWeightTargetRule>();
+
         private const string SelectTooltip = "クリックすると選択します";
-        private const string DestinationRemovedWarning =
-            "移動先ボーンが移動元に含まれていたため、移動元から除きました。";
+        private const string DestinationRemovedWarningFormat =
+            "ルール {0}: 移動先ボーンが移動元に含まれていたため、移動元から除きました。";
+        private const string MissingDestinationLabel =
+            "移動先ボーンが指定されていません。";
+        private const string NoSourceBonesLabel =
+            "移動元ボーンが指定されていません。";
+        private const string DestinationNotBoundLabel =
+            "移動先ボーンがこのメッシュのボーン一覧にありません。";
+        private const string NoSourceBoundLabel =
+            "移動元ボーンがこのメッシュのボーン一覧にありません。";
 
         internal static List<BoneWeightCollapseTarget> CollectTargets(GameObject root)
         {
@@ -41,57 +52,46 @@ namespace Poyo.CandyBox.BoneWeightCollapser.Editor
             return targets;
         }
 
-        internal static List<Transform> ResolveSourceBones(
-            BoneWeightSourceMode mode,
-            IList<Transform> explicitBones,
-            Transform descendantsRoot,
-            bool includeDescendantsRoot,
-            Transform destination,
+        internal static List<BoneWeightResolvedRule> ResolveRules(
+            IList<BoneWeightCollapseRule> rules,
             List<string> warnings)
         {
-            var result = new List<Transform>();
-            var seen = new HashSet<Transform>();
-            bool removedDestination = false;
-
-            if (mode == BoneWeightSourceMode.Explicit)
+            var result = new List<BoneWeightResolvedRule>();
+            if (rules == null)
             {
-                if (explicitBones != null)
-                {
-                    for (int boneIndex = 0; boneIndex < explicitBones.Count; boneIndex++)
-                    {
-                        AddSourceBone(
-                            explicitBones[boneIndex],
-                            destination,
-                            seen,
-                            result,
-                            ref removedDestination);
-                    }
-                }
-            }
-            else if (descendantsRoot != null)
-            {
-                Transform[] descendants =
-                    descendantsRoot.GetComponentsInChildren<Transform>(true);
-                for (int boneIndex = 0; boneIndex < descendants.Length; boneIndex++)
-                {
-                    Transform bone = descendants[boneIndex];
-                    if (!includeDescendantsRoot && bone == descendantsRoot)
-                    {
-                        continue;
-                    }
-
-                    AddSourceBone(
-                        bone,
-                        destination,
-                        seen,
-                        result,
-                        ref removedDestination);
-                }
+                return result;
             }
 
-            if (removedDestination && warnings != null)
+            for (int ruleIndex = 0; ruleIndex < rules.Count; ruleIndex++)
             {
-                warnings.Add(DestinationRemovedWarning);
+                BoneWeightCollapseRule input = rules[ruleIndex];
+                var resolved = new BoneWeightResolvedRule
+                {
+                    Number = ruleIndex + 1,
+                    Destination = input == null ? null : input.Destination,
+                    BlendRatio = input == null ? 1f : input.BlendRatio,
+                };
+                ResolveRuleSourceBones(input, resolved, warnings);
+                if (resolved.Destination == null)
+                {
+                    resolved.BlockReason = BoneWeightRuleBlockReason.MissingDestination;
+                    resolved.BlockedLabel = MissingDestinationLabel;
+                }
+                else if (resolved.SourceBones.Count == 0)
+                {
+                    resolved.BlockReason = BoneWeightRuleBlockReason.NoSourceBones;
+                    resolved.BlockedLabel = NoSourceBonesLabel;
+                }
+
+                if (resolved.BlockReason != BoneWeightRuleBlockReason.None)
+                {
+                    resolved.HeaderLabel = string.Format(
+                        "ルール {0}  無効: {1}",
+                        resolved.Number,
+                        resolved.BlockedLabel);
+                }
+
+                result.Add(resolved);
             }
 
             return result;
@@ -106,7 +106,6 @@ namespace Poyo.CandyBox.BoneWeightCollapser.Editor
 
             plan.TotalAffectedVertexCount = 0;
             plan.TotalMovedWeight = 0f;
-            float blendRatio = Mathf.Clamp01(plan.BlendRatio);
             for (int targetIndex = 0; targetIndex < plan.Targets.Count; targetIndex++)
             {
                 BoneWeightCollapseTarget target = plan.Targets[targetIndex];
@@ -139,32 +138,44 @@ namespace Poyo.CandyBox.BoneWeightCollapser.Editor
                         continue;
                     }
 
-                    target.DestinationBoneIndex = FindFirstBoneIndex(
-                        rendererBones, plan.Destination);
-                    if (target.DestinationBoneIndex < 0)
+                    BuildTargetRules(target, plan.Rules, rendererBones);
+                    ApplicableRules.Clear();
+                    for (int ruleIndex = 0;
+                         ruleIndex < target.Rules.Count;
+                         ruleIndex++)
                     {
-                        SetBlocked(target, BoneWeightBlockReason.DestinationNotBound);
+                        BoneWeightTargetRule targetRule = target.Rules[ruleIndex];
+                        if (targetRule.IsApplicable)
+                        {
+                            // NOTE: リストへ走査順に足し、表示順と処理順を一致させる。
+                            ApplicableRules.Add(targetRule);
+                        }
+                    }
+
+                    if (ApplicableRules.Count == 0)
+                    {
+                        BuildRuleRows(target);
+                        SetBlocked(target, BoneWeightBlockReason.NoApplicableRule);
                         continue;
                     }
 
-                    var sourceInfoByBoneIndex = new Dictionary<int, int>();
-                    BuildSourceBoneInformation(
-                        target, plan.SourceBones, rendererBones, sourceInfoByBoneIndex);
-                    if (target.SourceBoneIndices.Count == 0)
+                    bool succeeded = BoneWeightCollapserBaker.Collapse(
+                        mesh,
+                        ApplicableRules,
+                        plan.Normalize,
+                        false,
+                        out Mesh ignoredMesh,
+                        out BoneWeightCollapseStats stats);
+                    if (!succeeded)
                     {
-                        BuildSourceRows(target);
-                        SetBlocked(target, BoneWeightBlockReason.NoSourceBound);
+                        BuildRuleRows(target);
+                        SetBlocked(target, BoneWeightBlockReason.UnreadableMesh);
                         continue;
                     }
 
-                    NativeArray<BoneWeight1> weights = mesh.GetAllBoneWeights();
-                    ScanWeights(
-                        target,
-                        bonesPerVertex,
-                        weights,
-                        sourceInfoByBoneIndex,
-                        blendRatio);
-                    BuildSourceRows(target);
+                    target.AffectedVertexCount = stats.AffectedVertexCount;
+                    target.MovedWeightTotal = stats.MovedWeightTotal;
+                    BuildRuleRows(target);
                     if (target.AffectedVertexCount == 0)
                     {
                         SetBlocked(target, BoneWeightBlockReason.NoAffectedVertex);
@@ -187,9 +198,62 @@ namespace Poyo.CandyBox.BoneWeightCollapser.Editor
                 }
                 catch (Exception)
                 {
-                    BuildSourceRows(target);
+                    BuildRuleRows(target);
                     SetBlocked(target, BoneWeightBlockReason.UnreadableMesh);
                 }
+            }
+        }
+
+        private static void ResolveRuleSourceBones(
+            BoneWeightCollapseRule input,
+            BoneWeightResolvedRule resolved,
+            List<string> warnings)
+        {
+            var seen = new HashSet<Transform>();
+            bool removedDestination = false;
+            if (input != null && input.SourceMode == BoneWeightSourceMode.Explicit)
+            {
+                if (input.ExplicitBones != null)
+                {
+                    for (int boneIndex = 0;
+                         boneIndex < input.ExplicitBones.Count;
+                         boneIndex++)
+                    {
+                        AddSourceBone(
+                            input.ExplicitBones[boneIndex],
+                            resolved.Destination,
+                            seen,
+                            resolved.SourceBones,
+                            ref removedDestination);
+                    }
+                }
+            }
+            else if (input != null && input.DescendantsRoot != null)
+            {
+                Transform[] descendants =
+                    input.DescendantsRoot.GetComponentsInChildren<Transform>(true);
+                for (int boneIndex = 0; boneIndex < descendants.Length; boneIndex++)
+                {
+                    Transform bone = descendants[boneIndex];
+                    if (!input.IncludeDescendantsRoot &&
+                        bone == input.DescendantsRoot)
+                    {
+                        continue;
+                    }
+
+                    AddSourceBone(
+                        bone,
+                        resolved.Destination,
+                        seen,
+                        resolved.SourceBones,
+                        ref removedDestination);
+                }
+            }
+
+            if (removedDestination && warnings != null)
+            {
+                warnings.Add(string.Format(
+                    DestinationRemovedWarningFormat, resolved.Number));
             }
         }
 
@@ -217,6 +281,53 @@ namespace Poyo.CandyBox.BoneWeightCollapser.Editor
             }
         }
 
+        private static void BuildTargetRules(
+            BoneWeightCollapseTarget target,
+            IList<BoneWeightResolvedRule> rules,
+            Transform[] rendererBones)
+        {
+            if (rules == null)
+            {
+                return;
+            }
+
+            for (int ruleIndex = 0; ruleIndex < rules.Count; ruleIndex++)
+            {
+                BoneWeightResolvedRule resolved = rules[ruleIndex];
+                var targetRule = new BoneWeightTargetRule
+                {
+                    Rule = resolved,
+                    BlockReason = resolved.BlockReason,
+                    BlockedLabel = resolved.BlockedLabel,
+                };
+                target.Rules.Add(targetRule);
+                if (targetRule.BlockReason != BoneWeightRuleBlockReason.None)
+                {
+                    continue;
+                }
+
+                targetRule.DestinationBoneIndex = FindFirstBoneIndex(
+                    rendererBones, resolved.Destination);
+                if (targetRule.DestinationBoneIndex < 0)
+                {
+                    SetRuleBlocked(
+                        targetRule,
+                        BoneWeightRuleBlockReason.DestinationNotBound,
+                        DestinationNotBoundLabel);
+                    continue;
+                }
+
+                BuildSourceBoneInformation(targetRule, resolved.SourceBones, rendererBones);
+                if (targetRule.SourceBoneIndices.Count == 0)
+                {
+                    SetRuleBlocked(
+                        targetRule,
+                        BoneWeightRuleBlockReason.NoSourceBound,
+                        NoSourceBoundLabel);
+                }
+            }
+        }
+
         private static int FindFirstBoneIndex(Transform[] bones, Transform bone)
         {
             for (int boneIndex = 0; boneIndex < bones.Length; boneIndex++)
@@ -231,16 +342,15 @@ namespace Poyo.CandyBox.BoneWeightCollapser.Editor
         }
 
         private static void BuildSourceBoneInformation(
-            BoneWeightCollapseTarget target,
-            List<Transform> sourceBones,
-            Transform[] rendererBones,
-            Dictionary<int, int> sourceInfoByBoneIndex)
+            BoneWeightTargetRule targetRule,
+            IList<Transform> sourceBones,
+            Transform[] rendererBones)
         {
             for (int sourceIndex = 0; sourceIndex < sourceBones.Count; sourceIndex++)
             {
                 Transform sourceBone = sourceBones[sourceIndex];
                 var sourceInfo = new BoneWeightSourceBoneInfo { Bone = sourceBone };
-                target.SourceBones.Add(sourceInfo);
+                targetRule.SourceBones.Add(sourceInfo);
                 for (int rendererBoneIndex = 0;
                      rendererBoneIndex < rendererBones.Length;
                      rendererBoneIndex++)
@@ -252,78 +362,62 @@ namespace Poyo.CandyBox.BoneWeightCollapser.Editor
                     }
 
                     sourceInfo.BoneIndices.Add(rendererBoneIndex);
-                    target.SourceBoneIndices.Add(rendererBoneIndex);
-                    sourceInfoByBoneIndex.Add(rendererBoneIndex, sourceIndex);
+                    targetRule.SourceBoneIndices.Add(rendererBoneIndex);
+                    targetRule.SourceInfoByBoneIndex.Add(
+                        rendererBoneIndex, sourceIndex);
                 }
             }
         }
 
-        private static void ScanWeights(
-            BoneWeightCollapseTarget target,
-            NativeArray<byte> bonesPerVertex,
-            NativeArray<BoneWeight1> weights,
-            Dictionary<int, int> sourceInfoByBoneIndex,
-            float blendRatio)
+        private static void BuildRuleRows(BoneWeightCollapseTarget target)
         {
-            var countedSourceIndices = new HashSet<int>();
-            // NOTE: 頂点ごとの開始位置を積算しないと、毎回先頭から数えることになり
-            // 頂点数の二乗に比例して遅くなる。
-            int offset = 0;
-            for (int vertexIndex = 0; vertexIndex < bonesPerVertex.Length; vertexIndex++)
+            for (int ruleIndex = 0; ruleIndex < target.Rules.Count; ruleIndex++)
             {
-                int count = bonesPerVertex[vertexIndex];
-                bool affected = false;
-                countedSourceIndices.Clear();
-                for (int weightIndex = 0; weightIndex < count; weightIndex++)
+                BoneWeightTargetRule targetRule = target.Rules[ruleIndex];
+                if (!targetRule.IsApplicable)
                 {
-                    BoneWeight1 entry = weights[offset + weightIndex];
-                    if (entry.weight <= 0f ||
-                        !sourceInfoByBoneIndex.TryGetValue(
-                            entry.boneIndex, out int sourceInfoIndex))
-                    {
-                        continue;
-                    }
-
-                    float moved = entry.weight * blendRatio;
-                    if (moved <= 0f)
-                    {
-                        continue;
-                    }
-
-                    affected = true;
-                    target.MovedWeightTotal += moved;
-                    BoneWeightSourceBoneInfo sourceInfo =
-                        target.SourceBones[sourceInfoIndex];
-                    sourceInfo.MovedWeight += moved;
-                    if (countedSourceIndices.Add(sourceInfoIndex))
-                    {
-                        sourceInfo.VertexCount++;
-                    }
+                    targetRule.HeaderLabel = string.Format(
+                        "ルール {0}  無効: {1}",
+                        targetRule.Rule.Number,
+                        targetRule.BlockedLabel);
+                    continue;
                 }
 
-                if (affected)
-                {
-                    target.AffectedVertexCount++;
-                }
-
-                offset += count;
-            }
-        }
-
-        private static void BuildSourceRows(BoneWeightCollapseTarget target)
-        {
-            for (int sourceIndex = 0; sourceIndex < target.SourceBones.Count; sourceIndex++)
-            {
-                BoneWeightSourceBoneInfo source = target.SourceBones[sourceIndex];
-                string boneName = source.Bone == null ? "(Missing)" : source.Bone.name;
-                source.RowLabel = source.VertexCount > 0
+                targetRule.HeaderLabel = targetRule.AffectedVertexCount > 0
                     ? string.Format(
-                        "{0}  頂点 {1} / ウェイト {2:0.00}",
-                        boneName,
-                        source.VertexCount,
-                        source.MovedWeight)
-                    : boneName + "  該当なし";
+                        "ルール {0}  影響 {1} 頂点 / ウェイト {2:0.00}",
+                        targetRule.Rule.Number,
+                        targetRule.AffectedVertexCount,
+                        targetRule.MovedWeight)
+                    : string.Format(
+                        "ルール {0}  影響なし", targetRule.Rule.Number);
+                for (int sourceIndex = 0;
+                     sourceIndex < targetRule.SourceBones.Count;
+                     sourceIndex++)
+                {
+                    BoneWeightSourceBoneInfo source =
+                        targetRule.SourceBones[sourceIndex];
+                    string boneName = source.Bone == null
+                        ? "(Missing)"
+                        : source.Bone.name;
+                    source.RowLabel = source.VertexCount > 0
+                        ? string.Format(
+                            "{0}  頂点 {1} / ウェイト {2:0.00}",
+                            boneName,
+                            source.VertexCount,
+                            source.MovedWeight)
+                        : boneName + "  該当なし";
+                }
             }
+        }
+
+        private static void SetRuleBlocked(
+            BoneWeightTargetRule targetRule,
+            BoneWeightRuleBlockReason reason,
+            string label)
+        {
+            targetRule.BlockReason = reason;
+            targetRule.BlockedLabel = label;
         }
 
         private static void ResetScanState(BoneWeightCollapseTarget target)
@@ -337,9 +431,15 @@ namespace Poyo.CandyBox.BoneWeightCollapser.Editor
             target.VertexCount = 0;
             target.AffectedVertexCount = 0;
             target.MovedWeightTotal = 0f;
-            target.DestinationBoneIndex = -1;
-            target.SourceBoneIndices.Clear();
-            target.SourceBones.Clear();
+            if (target.Rules == null)
+            {
+                // NOTE: 直列化などで失われたリストを使う側でも復元し、走査を継続する。
+                target.Rules = new List<BoneWeightTargetRule>();
+            }
+            else
+            {
+                target.Rules.Clear();
+            }
         }
 
         private static void SetBlocked(
@@ -358,13 +458,8 @@ namespace Poyo.CandyBox.BoneWeightCollapser.Editor
                 case BoneWeightBlockReason.UnreadableMesh:
                     target.BlockedLabel = "メッシュのデータを読み取れませんでした。";
                     break;
-                case BoneWeightBlockReason.DestinationNotBound:
-                    target.BlockedLabel =
-                        "移動先ボーンがこのメッシュのボーン一覧にありません。";
-                    break;
-                case BoneWeightBlockReason.NoSourceBound:
-                    target.BlockedLabel =
-                        "移動元ボーンがこのメッシュのボーン一覧にありません。";
+                case BoneWeightBlockReason.NoApplicableRule:
+                    target.BlockedLabel = "このメッシュに適用できるルールがありません。";
                     break;
                 case BoneWeightBlockReason.NoAffectedVertex:
                     target.BlockedLabel = "影響を受ける頂点がありません。";
