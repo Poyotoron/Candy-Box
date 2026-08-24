@@ -13,6 +13,8 @@ namespace Poyo.CandyBox.Editor
             "ツールの切り替えを適用するとスクリプトが再コンパイルされます。");
         private static readonly GUIContent PendingNoticeContent = new GUIContent(
             "未適用の変更があります。適用するとスクリプトが再コンパイルされます。");
+        private static readonly GUIContent CompilingNoticeContent = new GUIContent(
+            "スクリプトをコンパイルしています。完了するまで設定を変更できません。");
         private static readonly GUIContent PendingMarkerContent = new GUIContent("*");
         private static readonly GUIContent ApplyContent = new GUIContent("適用");
         private static readonly GUIContent DiscardContent = new GUIContent("破棄");
@@ -142,7 +144,9 @@ namespace Poyo.CandyBox.Editor
                         GUIContent.none, GUILayout.Width(14f));
                 }
 
-                EditorGUI.BeginDisabledGroup(!tool.IsAvailable);
+                // NOTE: コンパイル完了時に実際の設定で入力を更新するため、
+                //       処理中の編集を許すと利用者の変更が黙って失われてしまう。
+                EditorGUI.BeginDisabledGroup(!tool.IsAvailable || IsBusy);
                 _pendingEnabled[i] = EditorGUILayout.Toggle(
                     _pendingEnabled[i], GUILayout.Width(18f));
                 EditorGUI.EndDisabledGroup();
@@ -188,7 +192,6 @@ namespace Poyo.CandyBox.Editor
             {
                 CandyBoxToolEntry selectedTool = CandyBoxToolCatalog.Tools[selectedIndex];
                 bool isEnabled = _actualEnabled[selectedIndex];
-                bool isBusy = EditorApplication.isCompiling || EditorApplication.isUpdating;
                 bool isRegistered = CandyBoxToolRegistry.TryGetOpener(
                     selectedTool.Id, out opener);
 
@@ -200,7 +203,7 @@ namespace Poyo.CandyBox.Editor
                 {
                     openButtonContent = DisabledButtonContent;
                 }
-                else if (isBusy || !isRegistered)
+                else if (IsBusy || !isRegistered)
                 {
                     openButtonContent = CompilingButtonContent;
                 }
@@ -217,15 +220,21 @@ namespace Poyo.CandyBox.Editor
             EditorGUI.EndDisabledGroup();
 
             EditorGUILayout.Space(4f);
-            if (hasPendingChanges)
+            if (IsBusy)
+            {
+                EditorGUILayout.HelpBox(
+                    CompilingNoticeContent.text, MessageType.Info);
+            }
+            else if (hasPendingChanges)
             {
                 EditorGUILayout.HelpBox(PendingNoticeContent.text, MessageType.Warning);
             }
 
             EditorGUILayout.BeginHorizontal();
-            EditorGUI.BeginDisabledGroup(!hasPendingChanges);
+            EditorGUI.BeginDisabledGroup(!hasPendingChanges || IsBusy);
             bool applyPressed = GUILayout.Button(
-                ApplyContent, GUILayout.Height(ButtonHeight));
+                IsBusy ? CompilingButtonContent : ApplyContent,
+                GUILayout.Height(ButtonHeight));
             bool discardPressed = GUILayout.Button(
                 DiscardContent, GUILayout.Height(ButtonHeight));
             EditorGUI.EndDisabledGroup();
@@ -336,6 +345,13 @@ namespace Poyo.CandyBox.Editor
 
         private void ApplyPendingChanges()
         {
+            // NOTE: 描画後にコンパイルが始まる可能性もあるため、ボタンの状態だけに
+            //       頼らず、設定を書き込む直前にも処理中でないことを確認する。
+            if (IsBusy)
+            {
+                return;
+            }
+
             int changeCount = 0;
             for (int i = 0; i < _actualEnabled.Length; i++)
             {
@@ -388,6 +404,16 @@ namespace Poyo.CandyBox.Editor
             }
 
             return symbols;
+        }
+
+        // NOTE: 判定を分散させると、表示側だけが操作可能なのに書き込み側では
+        //       拒否される状態が生まれるため、処理中の判定を 1 か所にまとめる。
+        private static bool IsBusy
+        {
+            get
+            {
+                return EditorApplication.isCompiling || EditorApplication.isUpdating;
+            }
         }
     }
 }
