@@ -27,6 +27,7 @@
 | [03_Helper for AAO Merge Bone](merge-bone.md) | ボーンの統合設定をツリーからまとめて切り替える | AAO: Avatar Optimizer 1.9.0 以降 |
 | [04_Hair Tone Matcher](hair-tone-matcher.md) | 差し替えた髪の色味を元の髪へ近づける | なし（lilToon または Poiyomi のマテリアルが対象） |
 | [05_Bone Weight Collapser](bone-weight-collapser.md) | 不要なボーンのウェイトを別のボーンへ寄せる | なし |
+| [06_BlendShape Backuper](blendshape-backuper.md) | ブレンドシェイプの値を保存し、あとから復元する | なし |
 
 ## 共通する考え方
 
@@ -59,4 +60,5 @@
 | ボーンの統合設定が多くて管理できない | [03_Helper for AAO Merge Bone](merge-bone.md) |
 | 差し替えた髪の色が合わない | [04_Hair Tone Matcher](hair-tone-matcher.md) |
 | 袖や衣装が指などのボーンに引きずられる | [05_Bone Weight Collapser](bone-weight-collapser.md) |
+| アップデートでブレンドシェイプの調整が壊れそう | [06_BlendShape Backuper](blendshape-backuper.md) |
 | うまく動かない | [困ったときは](troubleshooting.md) |

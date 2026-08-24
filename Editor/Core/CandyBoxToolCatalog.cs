@@ -96,6 +96,11 @@ lilToon と Poiyomi のマテリアルに対応します。導入は必須では
 袖が指ボーンに引きずられて変形する、といった追従の問題を解消するためのツールです。
 結果は新しいメッシュとして保存し、元のメッシュには書き込みません。";
 
+        private static readonly string BlendShapeBackuperDescription =
+            @"メッシュのブレンドシェイプの値を、キー名と対応付けて保存します。
+アバターのアップデートでキーの並びが変わっても、保存した値を名前で照らし合わせて戻せます。
+改変中のチェックポイントとしても使えます。";
+
         internal static readonly CandyBoxToolEntry[] Tools =
         {
             new CandyBoxToolEntry(
@@ -134,6 +139,11 @@ lilToon と Poiyomi のマテリアルに対応します。導入は必須では
                 "05_Bone Weight Collapser",
                 "不要なボーンのウェイトを、別のボーンへ寄せます",
                 BoneWeightCollapserDescription),
+            new CandyBoxToolEntry(
+                "06",
+                "06_BlendShape Backuper",
+                "ブレンドシェイプの値を保存し、あとから復元します",
+                BlendShapeBackuperDescription),
         };
 
         internal static CandyBoxToolEntry Find(string id)

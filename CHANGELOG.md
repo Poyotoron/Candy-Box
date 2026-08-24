@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.0] - 2026-08-25
+
+### Added
+
+- BlendShape Backuper: save the blend shape weights of a skinned mesh as an asset and restore them later by shape name.
+- Comparison of a backup against the current weights, grouped into changed, unchanged, backup-only and mesh-only shapes.
+- Temporary preview of the selected weights before restoring them.
+
+### Changed
+
+- Disable the tool toggles and the apply and discard buttons while scripts are compiling.
+
 ## [0.6.1] - 2026-08-18
 
 ### Added

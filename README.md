@@ -9,7 +9,7 @@
 
 - Unity 2022.3
 - エディタ専用
-- 基本機能、`04_Hair Tone Matcher`、`05_Bone Weight Collapser` に追加の依存パッケージは不要です。`04_Hair Tone Matcher` の対応シェーダーは lilToon と Poiyomi ですが、パッケージへの導入は必須ではありません。`01_Helper for MA Blendshape Sync` を使う場合は Modular Avatar 1.17.0 以降が必要です。`02_Helper for AAO Merge PhysBone` と `03_Helper for AAO Merge Bone` を使う場合は AAO: Avatar Optimizer 1.9.0 以降が必要です。
+- 基本機能、`04_Hair Tone Matcher`、`05_Bone Weight Collapser`、`06_BlendShape Backuper` に追加の依存パッケージは不要です。`04_Hair Tone Matcher` の対応シェーダーは lilToon と Poiyomi ですが、パッケージへの導入は必須ではありません。`01_Helper for MA Blendshape Sync` を使う場合は Modular Avatar 1.17.0 以降が必要です。`02_Helper for AAO Merge PhysBone` と `03_Helper for AAO Merge Bone` を使う場合は AAO: Avatar Optimizer 1.9.0 以降が必要です。
 
 ## 使い方
 
@@ -151,6 +151,21 @@ AAO: Avatar Optimizer 1.9.0 以降の AAO Merge Bone を使い、ボーンを親
 処理後のメッシュは新しい `.asset` として保存され、対象のメッシュ参照だけが差し替わります。元のメッシュや FBX は変更しません。同名のファイルがある場合は連番を付け、既存のファイルを上書きしません。
 
 再生中は実行できません。メッシュ参照の差し替えは「元に戻す（Undo）」で取り消せますが、生成したファイルは残るため、不要になったものは手動で削除してください。
+
+### 06_BlendShape Backuper
+
+`SkinnedMeshRenderer` のブレンドシェイプ値をキー名と対応付けて保存し、あとから復元します。メッシュの更新でキーの並びが変わっても、同じ名前のキーへ正しく戻せます。追加の依存パッケージはありません。
+
+1. 対象メッシュを指定します。
+2. 表示名と保存先を確認し、「バックアップを保存」を押します。
+3. 一覧から戻したいバックアップを選び、現在値との違いを確認します。
+4. 復元するキーにチェックを付け、「プレビュー」で見た目を確かめます。
+5. 「復元」を押します。
+
+既定の保存先は `Assets/zzz_pytr/CandyBox/BlendShapeBackups` です。フォルダが無ければ自動で作られ、サブフォルダを指定して分けることもできます。
+
+復元した値は「元に戻す（Undo）」で取り消せますが、保存したバックアップのファイルは Undo では消えません。不要になったものは Project ウィンドウから削除してください。
+再生中は保存・プレビュー・復元できません。
 
 ## ライセンス
 
