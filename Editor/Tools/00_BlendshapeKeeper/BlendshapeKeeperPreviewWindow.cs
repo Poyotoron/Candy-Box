@@ -12,6 +12,8 @@ namespace Poyo.CandyBox.BlendshapeKeeper.Editor
             "走査結果が失われました。元のウィンドウから開き直してください。");
         private static readonly GUIContent ClipContent = new GUIContent("アニメーション");
         private static readonly GUIContent TimeContent = new GUIContent("時刻");
+        private static readonly GUIContent HumanMotionContent = new GUIContent(
+            "このアニメーションの手や体のポーズはプレビューに表示されません。表情だけを確認できます。");
         private static readonly GUIContent ResetViewContent = new GUIContent("視点をリセット");
         private static readonly GUIContent BeforeContent = new GUIContent("修正前");
         private static readonly GUIContent AfterContent = new GUIContent("修正後");
@@ -69,6 +71,14 @@ namespace Poyo.CandyBox.BlendshapeKeeper.Editor
         private SkinnedMeshRenderer[] _allSkinnedRenderers =
             Array.Empty<SkinnedMeshRenderer>();
         private Renderer[] _allRenderers = Array.Empty<Renderer>();
+        private bool _selectedClipHasHumanMotion;
+        private float[][] _baselineWeights;
+        private Transform[] _baselineTransforms;
+        private Vector3[] _baselineLocalPositions;
+        private Quaternion[] _baselineLocalRotations;
+        private Vector3[] _baselineLocalScales;
+        private bool[] _baselineActive;
+        private bool[] _baselineRendererEnabled;
         private RenderTexture _beforeTexture;
         private Transform _headBone;
         private Transform _leftEyeBone;
@@ -181,9 +191,14 @@ namespace Poyo.CandyBox.BlendshapeKeeper.Editor
             for (int animatorIndex = 0; animatorIndex < animators.Length; animatorIndex++)
             {
                 animators[animatorIndex].enabled = false;
+                // NOTE: 人型の Avatar があると表情だけでも全身の姿勢が解き直され、体だけが沈む。
+                //       顔の注視点に必要なボーンを取得した後、複製だけから参照を外す。
+                animators[animatorIndex].avatar = null;
             }
 
             _allRenderers = _copyRoot.GetComponentsInChildren<Renderer>(true);
+            // NOTE: 表示用の準備を済ませてから退避し、復帰で対象が非表示になるのを防ぐ。
+            CaptureBaseline();
             _previewUtility.AddSingleGO(_copyRoot);
             BuildClipContents();
             SelectClip(0);
@@ -337,8 +352,76 @@ namespace Poyo.CandyBox.BlendshapeKeeper.Editor
             }
         }
 
+        private void CaptureBaseline()
+        {
+            _baselineWeights = new float[_allSkinnedRenderers.Length][];
+            for (int i = 0; i < _allSkinnedRenderers.Length; i++)
+            {
+                SkinnedMeshRenderer renderer = _allSkinnedRenderers[i];
+                if (renderer == null || renderer.sharedMesh == null) continue;
+                _baselineWeights[i] = new float[renderer.sharedMesh.blendShapeCount];
+                for (int j = 0; j < _baselineWeights[i].Length; j++)
+                    _baselineWeights[i][j] = renderer.GetBlendShapeWeight(j);
+            }
+
+            _baselineTransforms = _copyRoot.GetComponentsInChildren<Transform>(true);
+            int count = _baselineTransforms.Length;
+            _baselineLocalPositions = new Vector3[count];
+            _baselineLocalRotations = new Quaternion[count];
+            _baselineLocalScales = new Vector3[count];
+            _baselineActive = new bool[count];
+            for (int i = 0; i < count; i++)
+            {
+                Transform transform = _baselineTransforms[i];
+                _baselineLocalPositions[i] = transform.localPosition;
+                _baselineLocalRotations[i] = transform.localRotation;
+                _baselineLocalScales[i] = transform.localScale;
+                _baselineActive[i] = transform.gameObject.activeSelf;
+            }
+
+            _baselineRendererEnabled = new bool[_allRenderers.Length];
+            for (int i = 0; i < _allRenderers.Length; i++)
+                _baselineRendererEnabled[i] = _allRenderers[i].enabled;
+        }
+
+        private void RestoreBaseline()
+        {
+            // NOTE: 毎回基準から再生し、別のクリップに無いカーブの値を残さない。
+            //       描画ごとに二度呼ばれるため、階層の再走査や配列の確保は行わない。
+            if (_baselineTransforms == null) return;
+            for (int i = 0; i < _allSkinnedRenderers.Length; i++)
+            {
+                SkinnedMeshRenderer renderer = _allSkinnedRenderers[i];
+                float[] weights = _baselineWeights[i];
+                if (renderer == null || renderer.sharedMesh == null || weights == null) continue;
+                // NOTE: メッシュが交換されても、存在するブレンドシェイプだけを戻す。
+                int count = Mathf.Min(weights.Length, renderer.sharedMesh.blendShapeCount);
+                for (int j = 0; j < count; j++) renderer.SetBlendShapeWeight(j, weights[j]);
+            }
+
+            for (int i = 0; i < _baselineTransforms.Length; i++)
+            {
+                Transform transform = _baselineTransforms[i];
+                if (transform == null) continue;
+                transform.localPosition = _baselineLocalPositions[i];
+                transform.localRotation = _baselineLocalRotations[i];
+                transform.localScale = _baselineLocalScales[i];
+                // NOTE: 同じ値の SetActive でも有効化処理が走るため、変更が必要な場合だけ戻す。
+                if (transform.gameObject.activeSelf != _baselineActive[i])
+                    transform.gameObject.SetActive(_baselineActive[i]);
+            }
+
+            for (int i = 0; i < _allRenderers.Length; i++)
+            {
+                Renderer renderer = _allRenderers[i];
+                if (renderer != null && renderer.enabled != _baselineRendererEnabled[i])
+                    renderer.enabled = _baselineRendererEnabled[i];
+            }
+        }
+
         private void SampleClipForPreview(AnimationClip clip)
         {
+            RestoreBaseline();
             if (clip != null)
             {
                 float time = _times.Length > 0 ? _times[_timeIndex] : 0f;
@@ -478,6 +561,8 @@ namespace Poyo.CandyBox.BlendshapeKeeper.Editor
         private void SelectClip(int clipIndex)
         {
             _clipIndex = Mathf.Clamp(clipIndex, 0, _plan.Clips.Count - 1);
+            _selectedClipHasHumanMotion = _plan.Clips[_clipIndex].Clip != null &&
+                _plan.Clips[_clipIndex].Clip.humanMotion;
             _times = BlendshapeKeeperPreviewClip.CollectTimes(_plan.Clips[_clipIndex]);
             _timeIndex = Mathf.Clamp(_timeIndex, 0, Mathf.Max(0, _times.Length - 1));
             _timeContents = new GUIContent[_times.Length];
@@ -534,6 +619,11 @@ namespace Poyo.CandyBox.BlendshapeKeeper.Editor
                     TimeContent,
                     Mathf.Clamp(_timeIndex, 0, _timeContents.Length - 1),
                     _timeContents);
+            }
+
+            if (_selectedClipHasHumanMotion)
+            {
+                EditorGUILayout.HelpBox(HumanMotionContent.text, MessageType.Info);
             }
 
             bool nextFullBody = GUILayout.Toolbar(
@@ -745,6 +835,13 @@ namespace Poyo.CandyBox.BlendshapeKeeper.Editor
 
         private void ReleasePreviewResources()
         {
+            _baselineWeights = null;
+            _baselineTransforms = null;
+            _baselineLocalPositions = null;
+            _baselineLocalRotations = null;
+            _baselineLocalScales = null;
+            _baselineActive = null;
+            _baselineRendererEnabled = null;
             ReleaseBeforeTexture();
 
             if (_modifiedClip != null)
