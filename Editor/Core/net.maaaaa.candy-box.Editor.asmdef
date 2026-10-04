@@ -21,6 +21,11 @@
             "name": "com.anatawa12.avatar-optimizer",
             "expression": "1.9.0",
             "define": "CANDY_BOX_HAS_AAO"
+        },
+        {
+            "name": "com.vrchat.base",
+            "expression": "3.5.0",
+            "define": "CANDY_BOX_HAS_VRCSDK"
         }
     ],
     "noEngineReferences": false

@@ -60,6 +60,17 @@ namespace Poyo.CandyBox.Editor
         private static readonly bool AvatarOptimizerAvailable = false;
 #endif
 
+#if CANDY_BOX_HAS_VRCSDK
+        private static readonly bool VrchatSdkAvailable = true;
+#else
+        private static readonly bool VrchatSdkAvailable = false;
+#endif
+        private const string VrchatSdkRequirement = "VRChat SDK - Base 3.5.0 以降";
+        private static readonly string HairSetAdjusterDescription =
+            @"別のアバター向けに作られた髪を、頭に合わせて取り付けるのを手伝います。
+頭の軸に沿ったスライダーで位置・角度・大きさを調整でき、めり込みの少ない位置を自動で探せます。
+顔を単色で表示して貫通を見やすくし、髪の PhysBone Collider を本体のものへ移すこともできます。";
+
         private const string ModularAvatarRequirement =
             "Modular Avatar 1.17.0 以降";
 
@@ -144,6 +155,9 @@ lilToon と Poiyomi のマテリアルに対応します。導入は必須では
                 "06_BlendShape Backuper",
                 "ブレンドシェイプの値を保存し、あとから復元します",
                 BlendShapeBackuperDescription),
+            new CandyBoxToolEntry(
+                "07", "07_Hair Set Adjuster", "非対応の髪を、頭に合わせて取り付けます",
+                HairSetAdjusterDescription, VrchatSdkRequirement, VrchatSdkAvailable),
         };
 
         internal static CandyBoxToolEntry Find(string id)
