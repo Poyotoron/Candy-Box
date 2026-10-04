@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.8.0] - 2026-10-04
+
+### Added
+
+- Hair Set Adjuster: fit hair made for another avatar with position, rotation and scale sliders, snap to the head bone, and search for a position with less penetration.
+- Scene view face tint and penetration checks to see where hair intersects the head.
+- Migration of hair PhysBone colliders to equivalent avatar colliders, with optional removal of unused ones.
+
+### Changed
+
+- Hair Tone Matcher: the statistics method now estimates gamma to match contrast and limits it when highlights would clip.
+- AAO Merge Bone Helper: bones animated through the avatar descriptor or other components are now detected.
+
+### Fixed
+
+- Blendshape Keeper: the preview no longer sinks the body into the outfit, and values from the previously shown clip no longer remain.
+- AAO Merge PhysBone Helper: the chain length warning is no longer shown for properties without curves.
+
 ## [0.7.0] - 2026-08-25
 
 ### Added
