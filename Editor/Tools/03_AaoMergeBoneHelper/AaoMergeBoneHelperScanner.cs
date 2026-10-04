@@ -34,9 +34,9 @@ namespace Poyo.CandyBox.AaoMergeBoneHelper.Editor
                 AnimationScanned = avatarRoot != null,
             };
             HashSet<Transform> humanoidBones = CollectHumanoidBones(avatarRoot);
-            HashSet<string> animatedPaths = avatarRoot != null
+            HashSet<Transform> animatedBones = avatarRoot != null
                 ? AaoMergeBoneAnimationUsage.Collect(avatarRoot)
-                : new HashSet<string>();
+                : new HashSet<Transform>();
             plan.Root = BuildNode(
                 target.transform,
                 null,
@@ -45,7 +45,7 @@ namespace Poyo.CandyBox.AaoMergeBoneHelper.Editor
                 plan,
                 avatarRoot,
                 humanoidBones,
-                animatedPaths);
+                animatedBones);
 
             RefreshAllDynamicState(plan);
             int configuredCount = 0;
@@ -152,7 +152,7 @@ namespace Poyo.CandyBox.AaoMergeBoneHelper.Editor
             AaoMergeBoneHelperPlan plan,
             GameObject avatarRoot,
             HashSet<Transform> humanoidBones,
-            HashSet<string> animatedPaths)
+            HashSet<Transform> animatedBones)
         {
             bool isEditorOnly = ancestorEditorOnly || transform.CompareTag("EditorOnly");
             Component mergeBone = AaoMergeBoneType.Get(transform.gameObject);
@@ -186,9 +186,7 @@ namespace Poyo.CandyBox.AaoMergeBoneHelper.Editor
 
             if (avatarRoot != null)
             {
-                node.AnimationPath = AnimationUtility.CalculateTransformPath(
-                    transform, avatarRoot.transform);
-                if (animatedPaths.Contains(node.AnimationPath))
+                if (animatedBones.Contains(transform))
                 {
                     node.Warnings |= AaoMergeBoneWarning.Animated;
                 }
@@ -205,7 +203,7 @@ namespace Poyo.CandyBox.AaoMergeBoneHelper.Editor
                     plan,
                     avatarRoot,
                     humanoidBones,
-                    animatedPaths);
+                    animatedBones);
                 node.Children.Add(child);
             }
 

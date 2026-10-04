@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
@@ -6,49 +7,111 @@ namespace Poyo.CandyBox.AaoMergeBoneHelper.Editor
 {
     internal static class AaoMergeBoneAnimationUsage
     {
-        internal static HashSet<string> Collect(GameObject avatarRoot)
+        internal static HashSet<Transform> Collect(GameObject avatarRoot)
         {
-            var paths = new HashSet<string>();
+            var bones = new HashSet<Transform>();
             if (avatarRoot == null)
             {
-                return paths;
+                return bones;
             }
 
-            var clips = new HashSet<AnimationClip>();
-            Animator[] animators = avatarRoot.GetComponentsInChildren<Animator>(true);
-            for (int animatorIndex = 0; animatorIndex < animators.Length; animatorIndex++)
+            // NOTE: 同じクリップでも持ち主が違えば相対パスの起点が違うため、組で重複を除く。
+            var ownedClips = new Dictionary<Transform, HashSet<AnimationClip>>();
+            foreach (Component component in avatarRoot.GetComponentsInChildren<Component>(true))
             {
-                RuntimeAnimatorController controller =
-                    animators[animatorIndex].runtimeAnimatorController;
-                if (controller == null)
+                if (component == null || component is Transform)
                 {
                     continue;
                 }
 
-                AnimationClip[] controllerClips = controller.animationClips;
-                for (int clipIndex = 0; clipIndex < controllerClips.Length; clipIndex++)
+                try
                 {
-                    if (controllerClips[clipIndex] != null)
+                    using (var serialized = new SerializedObject(component))
                     {
-                        clips.Add(controllerClips[clipIndex]);
+                        SerializedProperty iterator = serialized.GetIterator();
+                        // NOTE: 非表示のフィールドや配列内のアニメーション参照も収集する。
+                        while (iterator.Next(true))
+                        {
+                            if (iterator.propertyType != SerializedPropertyType.ObjectReference)
+                            {
+                                continue;
+                            }
+
+                            UnityEngine.Object reference = iterator.objectReferenceValue;
+                            if (reference is RuntimeAnimatorController controller)
+                            {
+                                foreach (AnimationClip clip in controller.animationClips)
+                                {
+                                    AddClip(ownedClips, component.transform, clip);
+                                }
+                            }
+                            else
+                            {
+                                if (reference is AnimationClip clip)
+                                {
+                                    AddClip(ownedClips, component.transform, clip);
+                                }
+                            }
+                        }
                     }
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogWarning("Candy Box: " + component.GetType().Name + " のアニメーション参照を読めませんでした。\n" + exception);
                 }
             }
 
-            foreach (AnimationClip clip in clips)
+            foreach (KeyValuePair<Transform, HashSet<AnimationClip>> pair in ownedClips)
             {
-                EditorCurveBinding[] bindings = AnimationUtility.GetCurveBindings(clip);
-                for (int bindingIndex = 0; bindingIndex < bindings.Length; bindingIndex++)
+                foreach (AnimationClip clip in pair.Value)
                 {
-                    EditorCurveBinding binding = bindings[bindingIndex];
-                    if (binding.type == typeof(Transform))
+                    foreach (EditorCurveBinding binding in AnimationUtility.GetCurveBindings(clip))
                     {
-                        paths.Add(binding.path);
+                        if (binding.type != typeof(Transform))
+                        {
+                            continue;
+                        }
+
+                        // NOTE: 連携先によって起点が異なるため、見落としを避けて両方から解決する。
+                        AddResolved(bones, avatarRoot.transform, binding.path);
+                        if (pair.Key != avatarRoot.transform)
+                        {
+                            AddResolved(bones, pair.Key, binding.path);
+                        }
                     }
                 }
             }
 
-            return paths;
+            return bones;
+        }
+
+        private static void AddClip(
+            Dictionary<Transform, HashSet<AnimationClip>> ownedClips,
+            Transform owner,
+            AnimationClip clip)
+        {
+            if (clip == null)
+            {
+                return;
+            }
+
+            if (!ownedClips.TryGetValue(owner, out HashSet<AnimationClip> clips))
+            {
+                clips = new HashSet<AnimationClip>();
+                ownedClips.Add(owner, clips);
+            }
+
+            clips.Add(clip);
+        }
+
+        private static void AddResolved(HashSet<Transform> bones, Transform origin, string path)
+        {
+            // NOTE: パスが空のカーブは起点そのものを動かす。
+            Transform resolved = string.IsNullOrEmpty(path) ? origin : origin.Find(path);
+            if (resolved != null)
+            {
+                bones.Add(resolved);
+            }
         }
     }
 }

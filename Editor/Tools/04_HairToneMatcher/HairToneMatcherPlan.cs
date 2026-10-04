@@ -61,6 +61,7 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
         internal HairToneMaskCounts MaskCounts;
         internal HairToneCdf Cdf;
         internal HairToneAdjustment SuggestedAdjustment;
+        internal bool GammaLimited;
         internal HairToneAdjustment Adjustment;
         internal bool IsAdjustmentEdited;
         internal List<HairTonePropertyDiffGroup> PropertyDiffGroups;
@@ -76,6 +77,7 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
         internal Material SourceMaterial;
         internal HairToneShaderProfile SourceProfile;
         internal HairToneStats SourceStats;
+        internal HairToneValueProfile SourceValueProfile;
         internal HairToneMaskCounts SourceMaskCounts;
         internal bool[] SourceMask;
         internal Color[] SourcePixels;

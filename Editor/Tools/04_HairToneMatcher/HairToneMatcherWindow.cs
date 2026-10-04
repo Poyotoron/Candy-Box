@@ -13,6 +13,8 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
         private const float DefaultAlphaThreshold = 0.5f;
         private const float PreviewHeight = 220f;
         private const float AppliedPreviewHeight = 180f;
+        private const string GammaLimitedMessage =
+            "明るい部分が白く飛ぶため、コントラストの補正を弱めました。影の深さまで合わせるには「階調を合わせる」を使ってください。";
 
         [Serializable]
         private sealed class RendererCandidate
@@ -502,6 +504,8 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
                 if (target.IsAdjustmentEdited)
                     EditorGUILayout.LabelField("編集済み", EditorStyles.miniBoldLabel);
                 if (GUILayout.Button("算出値に戻す")) RestoreSuggestedAdjustment(target);
+                if (_sampling == HairToneSampling.Statistics && target.GammaLimited)
+                    EditorGUILayout.HelpBox(GammaLimitedMessage, MessageType.Info);
                 EditorGUILayout.HelpBox(
                     "彩度と明度は 1.0 で丸められるため、元の色まで届かないことがあります。",
                     MessageType.Info);
@@ -1433,6 +1437,9 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
                 return;
             }
 
+            // NOTE: 改変元はすでに見えている色なので、補正やメインカラーを掛け直さない。
+            HairToneValueProfile sourceValueProfile = HairToneStatistics.ComputeValueProfile(
+                allSourcePixels, allSourceMask, _alphaThreshold);
             HairToneStatistics.ComputeCdf(allSourcePixels, allSourceMask,
                 _alphaThreshold, out float[] sourceR, out float[] sourceG, out float[] sourceB);
             List<HairToneTarget> targets = BuildTargets(validSources, primarySource,
@@ -1448,7 +1455,7 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
             for (int i = 0; i < targets.Count; i++)
             {
                 ScanTarget(targets[i], validSources, primarySource,
-                    primarySourceProfile, sourceStats, warnings);
+                    primarySourceProfile, sourceStats, warnings, sourceValueProfile);
             }
 
             _plan = new HairToneMatcherPlan
@@ -1458,6 +1465,7 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
                 SourceMaterial = primarySource,
                 SourceProfile = primarySourceProfile,
                 SourceStats = sourceStats,
+                SourceValueProfile = sourceValueProfile,
                 SourceMaskCounts = combinedCounts,
                 SourcePixels = allSourcePixels,
                 SourceMask = allSourceMask,
@@ -1547,7 +1555,7 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
         private void ScanTarget(HairToneTarget target,
             List<HairToneSourceInput> sources, Material primarySource,
             HairToneShaderProfile primarySourceProfile, HairToneStats sourceStats,
-            List<string> warnings)
+            List<string> warnings, HairToneValueProfile sourceValueProfile)
         {
             for (int i = 0; i < sources.Count; i++)
             {
@@ -1606,8 +1614,9 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
             HairToneStatistics.ComputeCdf(target.Pixels, target.DestinationMask,
                 _alphaThreshold, out float[] r, out float[] g, out float[] b);
             target.Cdf = new HairToneCdf { R = r, G = g, B = b };
-            target.SuggestedAdjustment = HairToneStatistics.Solve(
-                sourceStats, target.Stats, target.MainColor, target.Profile);
+            target.SuggestedAdjustment = HairToneStatistics.SolveStatistics(
+                sourceStats, sourceValueProfile, target.Pixels, target.DestinationMask,
+                _alphaThreshold, target.MainColor, target.Profile, out target.GammaLimited);
             target.Adjustment = target.SuggestedAdjustment;
             target.IsAdjustmentEdited = false;
             UpdateAdjustmentSummary(target);

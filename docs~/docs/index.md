@@ -28,6 +28,7 @@
 | [04_Hair Tone Matcher](hair-tone-matcher.md) | 差し替えた髪の色味を元の髪へ近づける | なし（lilToon または Poiyomi のマテリアルが対象） |
 | [05_Bone Weight Collapser](bone-weight-collapser.md) | 不要なボーンのウェイトを別のボーンへ寄せる | なし |
 | [06_BlendShape Backuper](blendshape-backuper.md) | ブレンドシェイプの値を保存し、あとから復元する | なし |
+| [07_Hair Set Adjuster](hair-set-adjuster.md) | 別のアバター向けの髪を、頭に合わせて取り付ける | VRChat SDK - Base 3.5.0 以降 |
 
 ## 共通する考え方
 
@@ -61,4 +62,5 @@
 | 差し替えた髪の色が合わない | [04_Hair Tone Matcher](hair-tone-matcher.md) |
 | 袖や衣装が指などのボーンに引きずられる | [05_Bone Weight Collapser](bone-weight-collapser.md) |
 | アップデートでブレンドシェイプの調整が壊れそう | [06_BlendShape Backuper](blendshape-backuper.md) |
+| 非対応の髪を載せたら、沈んだり顔にめり込んだりする | [07_Hair Set Adjuster](hair-set-adjuster.md) |
 | うまく動かない | [困ったときは](troubleshooting.md) |
