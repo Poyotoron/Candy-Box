@@ -53,9 +53,9 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
                 Divide(current.z, original.z));
             HairSetOffset offset = HairSetOffset.Identity;
             offset.Angles = new Vector3(SignedAngle(angles.x), SignedAngle(angles.y), SignedAngle(angles.z));
-            if (Mathf.Abs(scale.x - scale.y) <= 1e-4f
-                && Mathf.Abs(scale.x - scale.z) <= 1e-4f
-                && Mathf.Abs(scale.y - scale.z) <= 1e-4f)
+            if (Mathf.Abs(scale.x - scale.y) <= 1e-4f &&
+                Mathf.Abs(scale.x - scale.z) <= 1e-4f &&
+                Mathf.Abs(scale.y - scale.z) <= 1e-4f)
             {
                 offset.Scale = scale.x;
             }
@@ -64,16 +64,16 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
                 offset.AxisScale = scale;
             }
 
-            offset.Position = Quaternion.Inverse(r)
-                * (Inverse(basePose, offset, target.AdjustTarget.position - target.HeadCenter)
-                    - (basePose.Position - target.HeadCenter));
+            offset.Position = Quaternion.Inverse(r) *
+                (Inverse(basePose, offset, target.AdjustTarget.position - target.HeadCenter) -
+                    (basePose.Position - target.HeadCenter));
             return offset;
         }
 
         internal static bool HasRootMoved(HairSetTarget target, HairSetBasePose basePose)
         {
-            return Vector3.Distance(target.AvatarRoot.transform.position, basePose.RootPosition) > 1e-4f
-                || Quaternion.Angle(target.AvatarRoot.transform.rotation, basePose.RootRotation) > 0.01f;
+            return Vector3.Distance(target.AvatarRoot.transform.position, basePose.RootPosition) > 1e-4f ||
+                Quaternion.Angle(target.AvatarRoot.transform.rotation, basePose.RootRotation) > 0.01f;
         }
 
         private static Vector3 Forward(Quaternion rr, Quaternion a, Vector3 s, Vector3 v)

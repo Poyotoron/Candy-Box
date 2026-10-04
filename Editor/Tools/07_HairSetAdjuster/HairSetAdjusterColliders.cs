@@ -154,8 +154,8 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
 
                 WorldShape shape = GetWorldShape(candidate);
                 float distance = Vector3.Distance(source.Center, shape.Center);
-                if (distance > CenterRadiusRatio * Mathf.Max(source.Radius, shape.Radius)
-                    || !RatioMatches(shape.Radius, source.Radius))
+                if (distance > CenterRadiusRatio * Mathf.Max(source.Radius, shape.Radius) ||
+                    !RatioMatches(shape.Radius, source.Radius))
                 {
                     continue;
                 }
@@ -209,11 +209,11 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
                 var mapping = new Dictionary<VRCPhysBoneColliderBase, VRCPhysBoneColliderBase>();
                 foreach (HairSetColliderRow row in plan.Rows)
                 {
-                    if (row.Selected
-                        && row.HairCollider != null
-                        && row.AvatarCollider != null
-                        && row.HairCollider.transform.IsChildOf(target.Hair.transform)
-                        && !row.AvatarCollider.transform.IsChildOf(target.Hair.transform))
+                    if (row.Selected &&
+                        row.HairCollider != null &&
+                        row.AvatarCollider != null &&
+                        row.HairCollider.transform.IsChildOf(target.Hair.transform) &&
+                        !row.AvatarCollider.transform.IsChildOf(target.Hair.transform))
                     {
                         mapping[row.HairCollider] = row.AvatarCollider;
                     }
@@ -293,8 +293,8 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
                     }
                 }
 
-                return "参照を " + references + " 件付け替えました。"
-                    + (deleteUnused ? "Collider を " + removed + " 個削除しました。" : "削除はしていません。");
+                return "参照を " + references + " 件付け替えました。" +
+                    (deleteUnused ? "Collider を " + removed + " 個削除しました。" : "削除はしていません。");
             }
             finally
             {

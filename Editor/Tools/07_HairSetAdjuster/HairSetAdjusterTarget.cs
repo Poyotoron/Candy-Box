@@ -109,18 +109,18 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
                 }
 
                 // NOTE: 同名の飾り用ボーンを避け、親名・深さ・列挙順の順で選ぶ。
-                bool parentMatches = candidate.parent != null
-                    && head.parent != null
-                    && string.Equals(candidate.parent.name, head.parent.name, StringComparison.Ordinal);
+                bool parentMatches = candidate.parent != null &&
+                    head.parent != null &&
+                    string.Equals(candidate.parent.name, head.parent.name, StringComparison.Ordinal);
                 int depth = 0;
                 for (Transform t = candidate; t != hair; t = t.parent)
                 {
                     depth++;
                 }
 
-                if (best == null
-                    || (parentMatches && !bestParent)
-                    || (parentMatches == bestParent && depth < bestDepth))
+                if (best == null ||
+                    (parentMatches && !bestParent) ||
+                    (parentMatches == bestParent && depth < bestDepth))
                 {
                     best = candidate;
                     bestParent = parentMatches;
@@ -154,10 +154,10 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
                 }
 
                 // NOTE: 最も重い骨で分類し、首や肩に少しだけ頭のウェイトがある頂点を含めない。
-                if (bestBone >= 0
-                    && bestBone < bones.Length
-                    && bones[bestBone] != null
-                    && bones[bestBone].IsChildOf(head))
+                if (bestBone >= 0 &&
+                    bestBone < bones.Length &&
+                    bones[bestBone] != null &&
+                    bones[bestBone].IsChildOf(head))
                 {
                     indices.Add(i);
                 }

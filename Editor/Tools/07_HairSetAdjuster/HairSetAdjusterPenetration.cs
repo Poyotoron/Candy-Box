@@ -244,11 +244,11 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
                             (stage + (float)(i + n) / (2 * n + 1)) / SearchAxes.Length);
                         // NOTE: 浮動小数の刻みを足し上げず、整数の候補番号から位置を計算する。
                         Vector3 delta = center + axis * (i * SearchSteps[stage]);
-                        Vector3 position = start.Position
-                            + HairSetAdjusterPose.WorldDeltaToOffset(basePose, start, delta);
-                        if (Mathf.Abs(position.x) > 0.15f
-                            || Mathf.Abs(position.y) > 0.15f
-                            || Mathf.Abs(position.z) > 0.15f)
+                        Vector3 position = start.Position +
+                            HairSetAdjusterPose.WorldDeltaToOffset(basePose, start, delta);
+                        if (Mathf.Abs(position.x) > 0.15f ||
+                            Mathf.Abs(position.y) > 0.15f ||
+                            Mathf.Abs(position.z) > 0.15f)
                         {
                             continue;
                         }

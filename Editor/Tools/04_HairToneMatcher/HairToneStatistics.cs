@@ -155,10 +155,10 @@ namespace Poyo.CandyBox.HairToneMatcher.Editor
                 float sumXX = 0f;
                 for (int index = 0; index < GammaQuantileCount; index++)
                 {
-                    float x = Mathf.Log(Mathf.Max(GetGammaQuantile(destination, index), LogFloor))
-                        - Mathf.Log(Mathf.Max(destination.P50, LogFloor));
-                    float y = Mathf.Log(Mathf.Max(GetGammaQuantile(sourceValues, index), LogFloor))
-                        - Mathf.Log(Mathf.Max(sourceValues.P50, LogFloor));
+                    float x = Mathf.Log(Mathf.Max(GetGammaQuantile(destination, index), LogFloor)) -
+                        Mathf.Log(Mathf.Max(destination.P50, LogFloor));
+                    float y = Mathf.Log(Mathf.Max(GetGammaQuantile(sourceValues, index), LogFloor)) -
+                        Mathf.Log(Mathf.Max(sourceValues.P50, LogFloor));
                     sumXY += x * y;
                     sumXX += x * x;
                 }

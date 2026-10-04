@@ -588,8 +588,8 @@ namespace Poyo.CandyBox.BlendshapeKeeper.Editor
         private void SelectClip(int clipIndex)
         {
             _clipIndex = Mathf.Clamp(clipIndex, 0, _plan.Clips.Count - 1);
-            _selectedClipHasHumanMotion = _plan.Clips[_clipIndex].Clip != null
-                && _plan.Clips[_clipIndex].Clip.humanMotion;
+            _selectedClipHasHumanMotion = _plan.Clips[_clipIndex].Clip != null &&
+                _plan.Clips[_clipIndex].Clip.humanMotion;
             _times = BlendshapeKeeperPreviewClip.CollectTimes(_plan.Clips[_clipIndex]);
             _timeIndex = Mathf.Clamp(_timeIndex, 0, Mathf.Max(0, _times.Length - 1));
             _timeContents = new GUIContent[_times.Length];
