@@ -31,7 +31,10 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
         [SerializeField] internal Vector3 AxisScale;
         internal static HairSetOffset Identity => new HairSetOffset
         {
-            Position = Vector3.zero, Angles = Vector3.zero, Scale = 1f, AxisScale = Vector3.one,
+            Position = Vector3.zero,
+            Angles = Vector3.zero,
+            Scale = 1f,
+            AxisScale = Vector3.one,
         };
     }
 

@@ -16,8 +16,20 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
         private static readonly GUIContent ResetContent = new GUIContent("基準に戻す");
         private static readonly GUIContent OverlayHelp = new GUIContent("Scene ビューにだけ表示します。シーンやマテリアルは変更しません。");
         private static readonly GUIContent ColliderHelp = new GUIContent("位置を合わせてから確認してください。位置が合っていないと、同じ役目の Collider も見つかりません。");
-        private static readonly GUIContent[] ColorContents = { new GUIContent("マゼンタ"), new GUIContent("シアン"), new GUIContent("黄") };
-        private static readonly Color[] OverlayColors = { new Color(1f, 0f, 0.8f, 1f), new Color(0f, 0.9f, 1f, 1f), new Color(1f, 0.9f, 0f, 1f) };
+        private static readonly GUIContent[] ColorContents =
+        {
+            new GUIContent("マゼンタ"),
+            new GUIContent("シアン"),
+            new GUIContent("黄")
+        };
+
+        private static readonly Color[] OverlayColors =
+        {
+            new Color(1f, 0f, 0.8f, 1f),
+            new Color(0f, 0.9f, 1f, 1f),
+            new Color(1f, 0.9f, 0f, 1f)
+        };
+
         private const string RootMovedMessage = "アバターが動いたため、「基準をいまの姿勢にする」を押してください。";
         private const string DescendantMessage = "調整の対象を動かしても、髪の頭ボーンは動きません。髪の頭ボーンかその親を対象にしてください。";
         private const string StalePenetrationMessage = "チェックのあとで動かしました。もう一度チェックしてください。";
@@ -46,10 +58,14 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
         private HairSetPenetrationResult _penetration;
         private HairSetColliderPlan _colliderPlan;
         private readonly HairSetFaceOverlay _overlay = new HairSetFaceOverlay();
-        private bool HasTarget => _target != null && _target.IsValid && _target.Face != null &&
-            _target.Hair != null && _target.AdjustTarget != null && _target.HeadBone != null &&
-            _target.AvatarRoot != null && !EditorApplication.isPlayingOrWillChangePlaymode;
-
+        private bool HasTarget => _target != null
+            && _target.IsValid
+            && _target.Face != null
+            && _target.Hair != null
+            && _target.AdjustTarget != null
+            && _target.HeadBone != null
+            && _target.AvatarRoot != null
+            && !EditorApplication.isPlayingOrWillChangePlaymode;
         internal static void Open()
         {
             var window = GetWindow<HairSetAdjusterWindow>(false, "07_Hair Set Adjuster", true);
@@ -76,12 +92,24 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
             CommitDrag();
         }
 
-        private void EndOverlay() => _overlay.End();
+        private void EndOverlay()
+        {
+            _overlay.End();
+        }
 
         private void OnPlayModeChanged(PlayModeStateChange state)
         {
-            if (state == PlayModeStateChange.ExitingEditMode) { EndOverlay(); CommitDrag(); }
-            if (state == PlayModeStateChange.EnteredEditMode) ResolveTarget();
+            if (state == PlayModeStateChange.ExitingEditMode)
+            {
+                EndOverlay();
+                CommitDrag();
+            }
+
+            if (state == PlayModeStateChange.EnteredEditMode)
+            {
+                ResolveTarget();
+            }
+
             Repaint();
         }
 
@@ -97,6 +125,7 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
                 _basePose = HairSetAdjusterPose.Capture(_target);
                 _offset = HairSetOffset.Identity;
             }
+
             if (!HasTarget || previous != _target.AdjustTarget || previousFace != _face || previousHair != _hair)
             {
                 _penetration = null;
@@ -105,16 +134,30 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
                 _colliderResult = null;
                 _poseVersion++;
             }
+
             _hasPhysBones = HasTarget && _hair.GetComponentsInChildren<VRCPhysBoneBase>(true).Length > 0;
             _alignReason = null;
             if (HasTarget)
             {
                 if (_target.HairHeadBone == null)
+                {
                     _alignReason = "髪の中に、頭ボーン（" + _target.HeadBone.name + "）と同じ名前のボーンがありません。";
-                else if (!_target.HairHeadBone.IsChildOf(_target.AdjustTarget)) _alignReason = DescendantMessage;
+                }
+                else
+                {
+                    if (!_target.HairHeadBone.IsChildOf(_target.AdjustTarget))
+                    {
+                        _alignReason = DescendantMessage;
+                    }
+                }
             }
+
             _overlay.End();
-            if (HasTarget && _overlayEnabled) _overlay.Begin(_face, OverlayColors[Mathf.Clamp(_overlayColorIndex, 0, 2)]);
+            if (HasTarget && _overlayEnabled)
+            {
+                _overlay.Begin(_face, OverlayColors[Mathf.Clamp(_overlayColorIndex, 0, 2)]);
+            }
+
             UpdateMigrationConfirmation();
         }
 
@@ -135,9 +178,24 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
         {
             if (HasTarget && _basePose.IsValid)
             {
-                _offset = HairSetAdjusterPose.Solve(_target, _basePose);
-                _poseVersion++;
+                HairSetOffset solved = HairSetAdjusterPose.Solve(_target, _basePose);
+                // NOTE: フォーカスだけでは姿勢は変わらないため、誤差内の逆算値で確認結果を古くしない。
+                if (Mathf.Abs(solved.Position.x - _offset.Position.x) > 1e-5f
+                    || Mathf.Abs(solved.Position.y - _offset.Position.y) > 1e-5f
+                    || Mathf.Abs(solved.Position.z - _offset.Position.z) > 1e-5f
+                    || Mathf.Abs(solved.Angles.x - _offset.Angles.x) > 1e-5f
+                    || Mathf.Abs(solved.Angles.y - _offset.Angles.y) > 1e-5f
+                    || Mathf.Abs(solved.Angles.z - _offset.Angles.z) > 1e-5f
+                    || Mathf.Abs(solved.Scale - _offset.Scale) > 1e-5f
+                    || Mathf.Abs(solved.AxisScale.x - _offset.AxisScale.x) > 1e-5f
+                    || Mathf.Abs(solved.AxisScale.y - _offset.AxisScale.y) > 1e-5f
+                    || Mathf.Abs(solved.AxisScale.z - _offset.AxisScale.z) > 1e-5f)
+                {
+                    _offset = solved;
+                    _poseVersion++;
+                }
             }
+
             Repaint();
         }
 
@@ -145,14 +203,28 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
         {
             _scroll = EditorGUILayout.BeginScrollView(_scroll);
             EditorGUI.BeginChangeCheck();
-            _face = (SkinnedMeshRenderer)EditorGUILayout.ObjectField(FaceContent, _face, typeof(SkinnedMeshRenderer), true);
+            _face = (SkinnedMeshRenderer)EditorGUILayout.ObjectField(
+                FaceContent, _face, typeof(SkinnedMeshRenderer), true);
             _hair = (GameObject)EditorGUILayout.ObjectField(HairContent, _hair, typeof(GameObject), true);
-            _adjustTargetOverride = (Transform)EditorGUILayout.ObjectField(TargetContent, _adjustTargetOverride, typeof(Transform), true);
-            if (EditorGUI.EndChangeCheck()) ResolveTarget();
+            _adjustTargetOverride = (Transform)EditorGUILayout.ObjectField(
+                TargetContent, _adjustTargetOverride, typeof(Transform), true);
+            if (EditorGUI.EndChangeCheck())
+            {
+                ResolveTarget();
+            }
+
             if (!HasTarget)
-                EditorGUILayout.HelpBox(_target != null && _target.BlockedReason != null ? _target.BlockedReason :
-                    "対象が失われました。顔メッシュと髪を指定し直してください。", MessageType.Warning);
-            else EditorGUILayout.LabelField(_target.AdjustTargetLabel, EditorStyles.wordWrappedLabel);
+            {
+                EditorGUILayout.HelpBox(
+                    _target != null
+                    && _target.BlockedReason != null ? _target.BlockedReason : "対象が失われました。顔メッシュと髪を指定し直してください。",
+                    MessageType.Warning);
+            }
+            else
+            {
+                EditorGUILayout.LabelField(_target.AdjustTargetLabel, EditorStyles.wordWrappedLabel);
+            }
+
             EditorGUI.BeginDisabledGroup(!HasTarget);
             DrawOverlay();
             DrawPose();
@@ -161,7 +233,10 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
             EditorGUI.EndDisabledGroup();
             EditorGUILayout.EndScrollView();
             // NOTE: ドラッグ中には重いチェックを行わず、確定した一操作をまとめて Undo する。
-            if (_dragUndoGroup >= 0 && GUIUtility.hotControl == 0) CommitDrag();
+            if (_dragUndoGroup >= 0 && GUIUtility.hotControl == 0)
+            {
+                CommitDrag();
+            }
         }
 
         private void DrawOverlay()
@@ -173,16 +248,27 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
             if (EditorGUI.EndChangeCheck())
             {
                 _overlayEnabled = enabled;
-                if (enabled && HasTarget) _overlay.Begin(_face, OverlayColors[_overlayColorIndex]);
-                else _overlay.End();
+                if (enabled && HasTarget)
+                {
+                    _overlay.Begin(_face, OverlayColors[_overlayColorIndex]);
+                }
+                else
+                {
+                    _overlay.End();
+                }
             }
+
             EditorGUI.BeginChangeCheck();
             int index = EditorGUILayout.Popup(ColorContent, _overlayColorIndex, ColorContents);
             if (EditorGUI.EndChangeCheck())
             {
                 _overlayColorIndex = index;
-                if (_overlay.IsActive) _overlay.SetColor(OverlayColors[index]);
+                if (_overlay.IsActive)
+                {
+                    _overlay.SetColor(OverlayColors[index]);
+                }
             }
+
             EditorGUILayout.LabelField(OverlayHelp, EditorStyles.miniLabel);
         }
 
@@ -191,7 +277,11 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("位置合わせ", EditorStyles.boldLabel);
             bool moved = HasTarget && HairSetAdjusterPose.HasRootMoved(_target, _basePose);
-            if (moved) EditorGUILayout.HelpBox(RootMovedMessage, MessageType.Info);
+            if (moved)
+            {
+                EditorGUILayout.HelpBox(RootMovedMessage, MessageType.Info);
+            }
+
             EditorGUI.BeginDisabledGroup(moved);
             HairSetOffset next = _offset;
             EditorGUI.BeginChangeCheck();
@@ -213,28 +303,57 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
                 next.AxisScale.z = EditorGUILayout.Slider("Z", next.AxisScale.z, 0.8f, 1.2f);
                 offsetChanged |= EditorGUI.EndChangeCheck();
             }
+
             // NOTE: 範囲外の逆算値を、描画しただけで丸めて姿勢を飛ばさない。
             if (offsetChanged && HasTarget && !moved)
             {
                 _offset = next;
-                if (_dragUndoGroup < 0) _dragUndoGroup = BeginPoseUndo();
+                if (_dragUndoGroup < 0)
+                {
+                    _dragUndoGroup = BeginPoseUndo();
+                }
+
                 WritePose();
             }
+
             EditorGUILayout.BeginHorizontal();
             EditorGUI.BeginDisabledGroup(_alignReason != null);
-            if (GUILayout.Button(AlignContent, GUILayout.MinWidth(GUI.skin.button.CalcSize(AlignContent).x))) AlignHead();
+            if (GUILayout.Button(AlignContent, GUILayout.MinWidth(GUI.skin.button.CalcSize(AlignContent).x)))
+            {
+                AlignHead();
+            }
+
             EditorGUI.EndDisabledGroup();
-            if (GUILayout.Button(SearchContent, GUILayout.MinWidth(GUI.skin.button.CalcSize(SearchContent).x))) SearchPosition();
+            if (GUILayout.Button(SearchContent, GUILayout.MinWidth(GUI.skin.button.CalcSize(SearchContent).x)))
+            {
+                SearchPosition();
+            }
+
             EditorGUILayout.EndHorizontal();
             EditorGUI.EndDisabledGroup();
             EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button(CaptureContent, GUILayout.MinWidth(GUI.skin.button.CalcSize(CaptureContent).x))) CapturePose();
+            if (GUILayout.Button(CaptureContent, GUILayout.MinWidth(GUI.skin.button.CalcSize(CaptureContent).x)))
+            {
+                CapturePose();
+            }
+
             EditorGUI.BeginDisabledGroup(moved);
-            if (GUILayout.Button(ResetContent, GUILayout.MinWidth(GUI.skin.button.CalcSize(ResetContent).x))) ResetPose();
+            if (GUILayout.Button(ResetContent, GUILayout.MinWidth(GUI.skin.button.CalcSize(ResetContent).x)))
+            {
+                ResetPose();
+            }
+
             EditorGUI.EndDisabledGroup();
             EditorGUILayout.EndHorizontal();
-            if (_alignReason != null) EditorGUILayout.HelpBox(_alignReason, MessageType.Info);
-            if (!string.IsNullOrEmpty(_searchResult)) EditorGUILayout.HelpBox(_searchResult, MessageType.Info);
+            if (_alignReason != null)
+            {
+                EditorGUILayout.HelpBox(_alignReason, MessageType.Info);
+            }
+
+            if (!string.IsNullOrEmpty(_searchResult))
+            {
+                EditorGUILayout.HelpBox(_searchResult, MessageType.Info);
+            }
         }
 
         private static int BeginPoseUndo()
@@ -259,15 +378,24 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
         {
             CommitDrag();
             int group = BeginPoseUndo();
-            try { WritePose(); }
-            finally { Undo.CollapseUndoOperations(group); }
+            try
+            {
+                WritePose();
+            }
+            finally
+            {
+                Undo.CollapseUndoOperations(group);
+            }
+
             OnPoseCommitted();
         }
 
         private void AlignHead()
         {
-            _offset.Position += Quaternion.Inverse(_basePose.RootRotation) *
-                (_target.HeadBone.position - _target.HairHeadBone.position);
+            _offset.Position += HairSetAdjusterPose.WorldDeltaToOffset(
+                _basePose,
+                _offset,
+                _target.HeadBone.position - _target.HairHeadBone.position);
             ApplyButtonPose();
         }
 
@@ -290,7 +418,11 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
 
         private void CommitDrag()
         {
-            if (_dragUndoGroup < 0) return;
+            if (_dragUndoGroup < 0)
+            {
+                return;
+            }
+
             Undo.CollapseUndoOperations(_dragUndoGroup);
             _dragUndoGroup = -1;
             OnPoseCommitted();
@@ -298,7 +430,10 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
 
         private void OnPoseCommitted()
         {
-            if (HasTarget) _penetration = HairSetAdjusterPenetration.Check(_target, _poseVersion);
+            if (HasTarget)
+            {
+                _penetration = HairSetAdjusterPenetration.Check(_target, _poseVersion);
+            }
         }
 
         private void SearchPosition()
@@ -308,51 +443,87 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
             _offset.Position = HairSetAdjusterPenetration.Search(_target, _basePose, _offset);
             ApplyButtonPose();
             Vector3 delta = (_offset.Position - old) * 100f;
-            _searchResult = "探索前 " + before + " 頂点 → 探索後 " + _penetration.Inside +
-                " 頂点（上下 " + delta.y.ToString("+0.0;-0.0;0.0") + " cm / 前後 " +
-                delta.z.ToString("+0.0;-0.0;0.0") + " cm 動かしました）";
+            _searchResult = "探索前 " + before + " 頂点 → 探索後 " + _penetration.Inside
+                + " 頂点（上下 " + delta.y.ToString("+0.0;-0.0;0.0") + " cm / 前後 "
+                + delta.z.ToString("+0.0;-0.0;0.0") + " cm 動かしました）";
         }
 
         private void DrawCheck()
         {
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("めり込みチェック", EditorStyles.boldLabel);
-            if (GUILayout.Button("チェック")) OnPoseCommitted();
+            if (GUILayout.Button("チェック"))
+            {
+                OnPoseCommitted();
+            }
+
             if (_penetration != null)
             {
                 EditorGUILayout.LabelField(_penetration.Label);
-                if (_penetration.PoseVersion != _poseVersion) EditorGUILayout.HelpBox(StalePenetrationMessage, MessageType.Info);
+                if (_penetration.PoseVersion != _poseVersion)
+                {
+                    EditorGUILayout.HelpBox(StalePenetrationMessage, MessageType.Info);
+                }
             }
+
             EditorGUI.BeginChangeCheck();
             _showPenetration = EditorGUILayout.Toggle("めり込んだ位置を表示", _showPenetration);
-            if (EditorGUI.EndChangeCheck()) SceneView.RepaintAll();
+            if (EditorGUI.EndChangeCheck())
+            {
+                SceneView.RepaintAll();
+            }
         }
 
         private void DrawPenetration(SceneView sceneView)
         {
-            if (Event.current.type != EventType.Repaint || !_showPenetration || _penetration == null || !HasTarget) return;
+            if (Event.current.type != EventType.Repaint || !_showPenetration || _penetration == null || !HasTarget)
+            {
+                return;
+            }
+
             Color previous = Handles.color;
             try
             {
                 Handles.color = Color.red;
                 foreach (Vector3 p in _penetration.InsidePoints)
-                    Handles.DotHandleCap(0, p, Quaternion.identity, HandleUtility.GetHandleSize(p) * 0.012f, EventType.Repaint);
+                {
+                    Handles.DotHandleCap(
+                        0,
+                        p,
+                        Quaternion.identity,
+                        HandleUtility.GetHandleSize(p) * 0.012f,
+                        EventType.Repaint);
+                }
             }
-            finally { Handles.color = previous; }
+            finally
+            {
+                Handles.color = previous;
+            }
         }
 
         private void DrawColliders()
         {
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Collider の移行", EditorStyles.boldLabel);
-            if (!_hasPhysBones) EditorGUILayout.HelpBox("髪に PhysBone がありません。", MessageType.Info);
+            if (!_hasPhysBones)
+            {
+                EditorGUILayout.HelpBox("髪に PhysBone がありません。", MessageType.Info);
+            }
+
             EditorGUI.BeginDisabledGroup(!_hasPhysBones);
             EditorGUILayout.LabelField(ColliderHelp, EditorStyles.wordWrappedMiniLabel);
-            if (GUILayout.Button("Collider を確認")) CollectColliders();
+            if (GUILayout.Button("Collider を確認"))
+            {
+                CollectColliders();
+            }
+
             bool fresh = _colliderPlan != null && _colliderPlan.PoseVersion == _poseVersion;
             if (_colliderPlan != null)
             {
-                if (!fresh) EditorGUILayout.HelpBox(StaleColliderMessage, MessageType.Info);
+                if (!fresh)
+                {
+                    EditorGUILayout.HelpBox(StaleColliderMessage, MessageType.Info);
+                }
                 else
                 {
                     EditorGUILayout.LabelField(_colliderPlan.SummaryLabel);
@@ -363,15 +534,30 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
                         row.Selected = EditorGUILayout.ToggleLeft(row.Label, row.Selected);
                         EditorGUI.EndDisabledGroup();
                     }
-                    if (EditorGUI.EndChangeCheck()) UpdateMigrationConfirmation();
+
+                    if (EditorGUI.EndChangeCheck())
+                    {
+                        UpdateMigrationConfirmation();
+                    }
                 }
             }
+
             _deleteUnusedColliders = EditorGUILayout.ToggleLeft("使われなくなった髪側の Collider を削除する", _deleteUnusedColliders);
-            EditorGUI.BeginDisabledGroup(!fresh || _selectedColliderCount == 0 ||
-                (HasTarget && HairSetAdjusterPose.HasRootMoved(_target, _basePose)));
-            if (GUILayout.Button("移行")) MigrateColliders();
+            EditorGUI.BeginDisabledGroup(!fresh
+                || _selectedColliderCount == 0
+                || (HasTarget
+                && HairSetAdjusterPose.HasRootMoved(_target, _basePose)));
+            if (GUILayout.Button("移行"))
+            {
+                MigrateColliders();
+            }
+
             EditorGUI.EndDisabledGroup();
-            if (!string.IsNullOrEmpty(_colliderResult)) EditorGUILayout.HelpBox(_colliderResult, MessageType.Info);
+            if (!string.IsNullOrEmpty(_colliderResult))
+            {
+                EditorGUILayout.HelpBox(_colliderResult, MessageType.Info);
+            }
+
             EditorGUI.EndDisabledGroup();
         }
 
@@ -386,14 +572,26 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
         {
             _selectedColliderCount = 0;
             if (_colliderPlan != null)
+            {
                 foreach (HairSetColliderRow row in _colliderPlan.Rows)
-                    if (row.Selected && row.HairCollider != null && row.AvatarCollider != null) _selectedColliderCount++;
+                {
+                    if (row.Selected && row.HairCollider != null && row.AvatarCollider != null)
+                    {
+                        _selectedColliderCount++;
+                    }
+                }
+            }
+
             _migrationConfirmation = _selectedColliderCount + " 組の Collider を移行します。よろしいですか？";
         }
 
         private void MigrateColliders()
         {
-            if (!EditorUtility.DisplayDialog("Candy Box", _migrationConfirmation, "移行", "キャンセル")) return;
+            if (!EditorUtility.DisplayDialog("Candy Box", _migrationConfirmation, "移行", "キャンセル"))
+            {
+                return;
+            }
+
             _colliderResult = HairSetAdjusterColliders.Apply(_target, _colliderPlan, _deleteUnusedColliders);
             _colliderPlan = null;
             UpdateMigrationConfirmation();

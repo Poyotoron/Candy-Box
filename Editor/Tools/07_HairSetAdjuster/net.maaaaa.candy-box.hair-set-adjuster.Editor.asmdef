@@ -1,14 +1,29 @@
 {
     "name": "net.maaaaa.candy-box.hair-set-adjuster.Editor",
     "rootNamespace": "Poyo.CandyBox.HairSetAdjuster.Editor",
-    "references": ["net.maaaaa.candy-box.Editor"],
-    "includePlatforms": ["Editor"],
+    "references": [
+        "net.maaaaa.candy-box.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": true,
-    "precompiledReferences": ["VRC.Dynamics.dll"],
+    "precompiledReferences": [
+        "VRC.Dynamics.dll"
+    ],
     "autoReferenced": false,
-    "defineConstraints": ["CANDY_BOX_TOOL_07", "CANDY_BOX_HAS_VRCSDK"],
-    "versionDefines": [{"name": "com.vrchat.base", "expression": "3.5.0", "define": "CANDY_BOX_HAS_VRCSDK"}],
+    "defineConstraints": [
+        "CANDY_BOX_TOOL_07",
+        "CANDY_BOX_HAS_VRCSDK"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.vrchat.base",
+            "expression": "3.5.0",
+            "define": "CANDY_BOX_HAS_VRCSDK"
+        }
+    ],
     "noEngineReferences": false
 }

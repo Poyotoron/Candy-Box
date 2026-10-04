@@ -6,7 +6,6 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
     internal static class HairSetAdjusterEntry
     {
         internal const string ToolId = "07";
-
         [InitializeOnLoadMethod]
         private static void Register()
         {

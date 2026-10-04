@@ -371,9 +371,19 @@ namespace Poyo.CandyBox.AaoMergePhysBoneHelper.Editor
         // NOTE: キーが 0 個のカーブは倍率 1.0 として扱われ、チェーン上の位置に依存しない。
         private static bool HasAnyCurveKeys(AnimationCurve[] curves)
         {
-            if (curves == null) return false;
+            if (curves == null)
+            {
+                return false;
+            }
+
             for (int i = 0; i < curves.Length; i++)
-                if (curves[i] != null && curves[i].length > 0) return true;
+            {
+                if (curves[i] != null && curves[i].length > 0)
+                {
+                    return true;
+                }
+            }
+
             return false;
         }
 
