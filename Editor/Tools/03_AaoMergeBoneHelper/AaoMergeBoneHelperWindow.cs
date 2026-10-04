@@ -41,7 +41,7 @@ namespace Poyo.CandyBox.AaoMergeBoneHelper.Editor
         private const string MissingAvatarRootMessage =
             "アバタールートが見つかりません。人型ボーンの判定とアニメーションの検出を行いません。";
         private const string AnimationScannedMessage =
-            "アニメーションの確認は、アバターの Animator から辿れるものだけが対象です。ビルド時に追加されるアニメーションは含まれません。";
+            "アニメーションの確認は、アバターの中のコンポーネントが参照している Animator Controller とアニメーションだけが対象です。ビルド時に追加されるアニメーションは含まれません。";
         private const string AnimationNotScannedMessage =
             "アバタールートが見つからないため、アニメーションの確認を行っていません。";
         private const string NoFilterMatchesMessage = "一致するボーンがありません。";

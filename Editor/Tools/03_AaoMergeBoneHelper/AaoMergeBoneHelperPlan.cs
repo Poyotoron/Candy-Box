@@ -36,7 +36,6 @@ namespace Poyo.CandyBox.AaoMergeBoneHelper.Editor
         internal GUIContent LabelContent;
         internal string StatusText;
         internal bool MatchesFilter = true;
-        internal string AnimationPath;
         internal string TargetRelativePath;
     }
 
