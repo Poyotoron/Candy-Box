@@ -272,7 +272,8 @@ namespace Poyo.CandyBox.AaoMergePhysBoneHelper.Editor
                             return null;
                         }
 
-                        if (plan.ChainLengthDiffers)
+                        // NOTE: 統合後が空でも入力にカーブがあれば、異なる物理的位置の値を混ぜている。
+                        if (plan.ChainLengthDiffers && HasAnyCurveKeys(curves))
                         {
                             suggestion.Warning = ChainLengthWarning;
                         }
@@ -358,12 +359,22 @@ namespace Poyo.CandyBox.AaoMergePhysBoneHelper.Editor
             }
 
             suggestion.Vector = new Vector3(x, y, z);
-            if (plan.ChainLengthDiffers)
+            if (plan.ChainLengthDiffers && (HasAnyCurveKeys(xCurves) ||
+                HasAnyCurveKeys(yCurves) || HasAnyCurveKeys(zCurves)))
             {
                 suggestion.Warning = ChainLengthWarning;
             }
 
             return true;
+        }
+
+        // NOTE: キーが 0 個のカーブは倍率 1.0 として扱われ、チェーン上の位置に依存しない。
+        private static bool HasAnyCurveKeys(AnimationCurve[] curves)
+        {
+            if (curves == null) return false;
+            for (int i = 0; i < curves.Length; i++)
+                if (curves[i] != null && curves[i].length > 0) return true;
+            return false;
         }
 
         private static float ComputeMinimum(float[] values)
