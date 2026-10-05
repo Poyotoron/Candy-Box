@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -9,9 +10,13 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
         private SkinnedMeshRenderer _face;
         private Mesh _mesh;
         private Material _material;
+        private Mesh _hiddenMesh;
+        private Material _hiddenMaterial;
+        private bool _showHidden;
+        private bool _hasHiddenTriangles;
         private double _lastBakeTime;
         internal bool IsActive => _mesh != null && _material != null;
-        internal void Begin(SkinnedMeshRenderer face, Color color)
+        internal void Begin(SkinnedMeshRenderer face, Color color, int[] headVertexIndices, Vector3 headCenter, bool showHidden)
         {
             End();
             if (face == null || face.sharedMesh == null)
@@ -36,6 +41,26 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
             _material.SetInt("_ZTest", (int)CompareFunction.LessEqual);
             _material.SetInt("_ZWrite", 1);
             _material.SetInt("_Cull", (int)CullMode.Back);
+            _hiddenMaterial = new Material(shader)
+            {
+                hideFlags = HideFlags.HideAndDontSave,
+                name = "CandyBoxFaceOverlayHidden",
+                // NOTE: 髪の深度が揃ってから隠れた部分を判定するため、最後に描く。
+                renderQueue = 4000
+            };
+            _hiddenMaterial.SetInt("_ZTest", (int)CompareFunction.Greater);
+            // NOTE: 透かした顔が後続の描画を隠さないよう、深度には書き込まない。
+            _hiddenMaterial.SetInt("_ZWrite", 0);
+            _hiddenMaterial.SetInt("_Cull", (int)CullMode.Back);
+            _hiddenMaterial.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha);
+            _hiddenMaterial.SetInt("_DstBlend", (int)BlendMode.OneMinusSrcAlpha);
+            _hiddenMesh = new Mesh
+            {
+                hideFlags = HideFlags.HideAndDontSave,
+                name = "CandyBoxFaceOverlayHidden"
+            };
+            _showHidden = showHidden;
+            SetColor(color);
             _mesh = new Mesh
             {
                 hideFlags = HideFlags.HideAndDontSave,
@@ -44,6 +69,7 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
             try
             {
                 Bake();
+                SelectHiddenTriangles(headVertexIndices, headCenter);
             }
             catch
             {
@@ -64,7 +90,60 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
             }
 
             _material.SetColor("_Color", color);
+            color.a = 0.35f;
+            _hiddenMaterial.SetColor("_Color", color);
             SceneView.RepaintAll();
+        }
+
+        internal void SetShowHidden(bool showHidden)
+        {
+            _showHidden = showHidden;
+            if (IsActive)
+            {
+                SceneView.RepaintAll();
+            }
+        }
+
+        private void SelectHiddenTriangles(int[] headVertexIndices, Vector3 headCenter)
+        {
+            Vector3[] vertices = _mesh.vertices;
+            var isHead = new bool[vertices.Length];
+            foreach (int index in headVertexIndices)
+            {
+                isHead[index] = true;
+            }
+
+            Vector3 localCenter = Matrix4x4.TRS(
+                _face.transform.position, _face.transform.rotation, Vector3.one).inverse.MultiplyPoint3x4(headCenter);
+            var triangles = new List<int>();
+            for (int s = 0; s < _mesh.subMeshCount; s++)
+            {
+                int[] indices = _mesh.GetTriangles(s);
+                for (int i = 0; i < indices.Length; i += 3)
+                {
+                    int a = indices[i];
+                    int b = indices[i + 1];
+                    int c = indices[i + 2];
+                    // NOTE: 頭以外と内向きの面を除かないと、体や目・口の内側まで透けてしまう。
+                    // NOTE: 裏面の破棄は巻き方向で決まるため、頂点法線で向きを補正しない。
+                    if (isHead[a] && isHead[b] && isHead[c] &&
+                        Vector3.Dot(Vector3.Cross(vertices[b] - vertices[a], vertices[c] - vertices[a]),
+                            (vertices[a] + vertices[b] + vertices[c]) / 3f - localCenter) > 0f)
+                    {
+                        triangles.Add(a);
+                        triangles.Add(b);
+                        triangles.Add(c);
+                    }
+                }
+            }
+
+            if (vertices.Length > 65535)
+            {
+                _hiddenMesh.indexFormat = IndexFormat.UInt32;
+            }
+
+            _hiddenMesh.SetTriangles(triangles, 0);
+            _hasHiddenTriangles = triangles.Count > 0;
         }
 
         private void Bake()
@@ -84,6 +163,8 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
                 _mesh.RecalculateBounds();
             }
 
+            _hiddenMesh.SetVertices(vertices);
+            _hiddenMesh.RecalculateBounds();
             _lastBakeTime = EditorApplication.timeSinceStartup;
         }
 
@@ -112,12 +193,17 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
             {
                 Graphics.DrawMesh(_mesh, matrix, _material, 0, sceneView.camera, i);
             }
+
+            if (_showHidden && _hasHiddenTriangles)
+            {
+                Graphics.DrawMesh(_hiddenMesh, matrix, _hiddenMaterial, 0, sceneView.camera, 0);
+            }
         }
 
         internal void End()
         {
             SceneView.beforeSceneGui -= OnBeforeSceneGui;
-            bool wasActive = _mesh != null || _material != null;
+            bool wasActive = _mesh != null || _material != null || _hiddenMesh != null || _hiddenMaterial != null;
             if (_mesh != null)
             {
                 Object.DestroyImmediate(_mesh);
@@ -128,8 +214,22 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
                 Object.DestroyImmediate(_material);
             }
 
+            // NOTE: 表示専用の資源は、終了するたびに破棄して再コンパイルや再生への持ち越しを防ぐ。
+            if (_hiddenMesh != null)
+            {
+                Object.DestroyImmediate(_hiddenMesh);
+            }
+
+            if (_hiddenMaterial != null)
+            {
+                Object.DestroyImmediate(_hiddenMaterial);
+            }
+
             _mesh = null;
             _material = null;
+            _hiddenMesh = null;
+            _hiddenMaterial = null;
+            _hasHiddenTriangles = false;
             _face = null;
             if (wasActive)
             {

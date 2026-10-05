@@ -50,11 +50,22 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
 
     internal sealed class HairSetPenetrationResult
     {
+        internal Mesh FaceMesh;
+        internal int FaceTriangleCount;
         internal int Inside;
         internal int Total;
         internal List<Vector3> InsidePoints = new List<Vector3>();
         internal string Label;
         internal int PoseVersion;
+    }
+
+    internal sealed class HairSetFitResult
+    {
+        internal bool Succeeded;
+        internal string FailureReason;
+        internal bool FromHeadBone;
+        internal Vector3 WorldDelta;
+        internal float Scale;
     }
 
     internal sealed class HairSetColliderRow

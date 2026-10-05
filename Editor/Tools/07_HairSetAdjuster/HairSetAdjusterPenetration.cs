@@ -105,27 +105,8 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
 
     internal static class HairSetAdjusterPenetration
     {
-        private static readonly Vector3[] SearchAxes =
+        internal static void CollectHairMesh(GameObject hair, List<Vector3> points, List<int> triangles)
         {
-            Vector3.up,
-            Vector3.forward,
-            Vector3.up
-        };
-        private static readonly float[] SearchRanges =
-        {
-            0.10f,
-            0.03f,
-            0.01f
-        };
-        private static readonly float[] SearchSteps =
-        {
-            0.01f,
-            0.005f,
-            0.002f
-        };
-        internal static List<Vector3> CollectHairPoints(GameObject hair)
-        {
-            var points = new List<Vector3>();
             var baked = new Mesh
             {
                 hideFlags = HideFlags.HideAndDontSave
@@ -173,13 +154,23 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
                         }
                     }
 
+                    int baseIndex = points.Count;
                     foreach (Vector3 vertex in mesh.vertices)
                     {
                         points.Add(matrix.MultiplyPoint3x4(vertex));
                     }
-                }
 
-                return points;
+                    if (triangles != null)
+                    {
+                        for (int s = 0; s < mesh.subMeshCount; s++)
+                        {
+                            foreach (int index in mesh.GetTriangles(s))
+                            {
+                                triangles.Add(baseIndex + index);
+                            }
+                        }
+                    }
+                }
             }
             finally
             {
@@ -187,19 +178,23 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
             }
         }
 
-        internal static HairSetPenetrationResult Check(HairSetTarget target, int poseVersion)
+        internal static HairSetPenetrationResult Check(HairSetTarget target, int poseVersion, bool buildFaceMesh)
         {
             HairSetHeadField field = HairSetHeadField.Build(target);
-            List<Vector3> points = CollectHairPoints(target.Hair);
+            var points = new List<Vector3>();
+            var triangles = new List<int>();
+            CollectHairMesh(target.Hair, points, buildFaceMesh ? triangles : null);
+            var inside = new bool[points.Count];
             var result = new HairSetPenetrationResult
             {
                 Total = points.Count,
                 PoseVersion = poseVersion
             };
-            foreach (Vector3 point in points)
+            for (int i = 0; i < points.Count; i++)
             {
-                field.Evaluate(point, out _, out bool inside);
-                if (!inside)
+                Vector3 point = points[i];
+                field.Evaluate(point, out _, out inside[i]);
+                if (!inside[i])
                 {
                     continue;
                 }
@@ -211,85 +206,45 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
                 }
             }
 
+            if (buildFaceMesh)
+            {
+                var vertices = new List<Vector3>();
+                var indices = new List<int>();
+                for (int i = 0; i < triangles.Count && result.FaceTriangleCount < 20000; i += 3)
+                {
+                    int a = triangles[i];
+                    int b = triangles[i + 1];
+                    int c = triangles[i + 2];
+                    if (!inside[a] && !inside[b] && !inside[c])
+                    {
+                        continue;
+                    }
+
+                    // NOTE: 三角形ごとに頂点を持たせ、元メッシュの索引を引き直す誤りを避ける。
+                    indices.Add(vertices.Count);
+                    vertices.Add(points[a]);
+                    indices.Add(vertices.Count);
+                    vertices.Add(points[b]);
+                    indices.Add(vertices.Count);
+                    vertices.Add(points[c]);
+                    result.FaceTriangleCount++;
+                }
+
+                if (vertices.Count > 0)
+                {
+                    result.FaceMesh = new Mesh
+                    {
+                        hideFlags = HideFlags.HideAndDontSave,
+                        name = "CandyBoxPenetrationFaces"
+                    };
+                    result.FaceMesh.SetVertices(vertices);
+                    result.FaceMesh.SetTriangles(indices, 0);
+                    result.FaceMesh.RecalculateBounds();
+                }
+            }
+
             result.Label = "めり込み " + result.Inside + " 頂点 / 全 " + result.Total + " 頂点";
             return result;
-        }
-
-        internal static Vector3 Search(HairSetTarget target, HairSetBasePose basePose, HairSetOffset start)
-        {
-            List<Vector3> all = CollectHairPoints(target.Hair);
-            var samples = new List<Vector3>();
-            // NOTE: 固定間隔で間引き、同じ開始姿勢には同じ結果を返す。
-            int stride = Mathf.Max(1, Mathf.CeilToInt(all.Count / 4096f));
-            for (int i = 0; i < all.Count; i += stride)
-            {
-                samples.Add(all[i]);
-            }
-
-            HairSetHeadField field = HairSetHeadField.Build(target);
-            Vector3 best = Vector3.zero;
-            int bestScore = Score(field, samples, best);
-            try
-            {
-                for (int stage = 0; stage < SearchAxes.Length; stage++)
-                {
-                    Vector3 center = best;
-                    Vector3 axis = basePose.RootRotation * SearchAxes[stage];
-                    int n = Mathf.RoundToInt(SearchRanges[stage] / SearchSteps[stage]);
-                    for (int i = -n; i <= n; i++)
-                    {
-                        EditorUtility.DisplayProgressBar(
-                            "Candy Box",
-                            "めり込みが少ない位置を探しています…",
-                            (stage + (float)(i + n) / (2 * n + 1)) / SearchAxes.Length);
-                        // NOTE: 浮動小数の刻みを足し上げず、整数の候補番号から位置を計算する。
-                        Vector3 delta = center + axis * (i * SearchSteps[stage]);
-                        Vector3 position = start.Position +
-                            HairSetAdjusterPose.WorldDeltaToOffset(basePose, start, delta);
-                        if (Mathf.Abs(position.x) > 0.15f ||
-                            Mathf.Abs(position.y) > 0.15f ||
-                            Mathf.Abs(position.z) > 0.15f)
-                        {
-                            continue;
-                        }
-
-                        int score = Score(field, samples, delta);
-                        if (score > bestScore || (score == bestScore && delta.sqrMagnitude < best.sqrMagnitude))
-                        {
-                            best = delta;
-                            bestScore = score;
-                        }
-                    }
-                }
-
-                return start.Position + HairSetAdjusterPose.WorldDeltaToOffset(basePose, start, best);
-            }
-            finally
-            {
-                EditorUtility.ClearProgressBar();
-            }
-        }
-
-        private static int Score(HairSetHeadField field, List<Vector3> samples, Vector3 delta)
-        {
-            int score = 0;
-            // NOTE: めり込みだけを減らすと髪が浮くため、頭の近くにある頂点数も評価する。
-            //       探索中は Transform に触れず、点の平行移動だけで評価する。
-            foreach (Vector3 point in samples)
-            {
-                field.Evaluate(point + delta, out bool near, out bool inside);
-                if (near)
-                {
-                    score++;
-                }
-
-                if (inside)
-                {
-                    score -= 10;
-                }
-            }
-
-            return score;
         }
     }
 }
