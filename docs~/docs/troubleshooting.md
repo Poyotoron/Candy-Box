@@ -78,7 +78,7 @@
 ## 07_Hair Set Adjuster の位置合わせについて
 
 ??? question "非対応の髪が沈む・顔にめり込む"
-    [07_Hair Set Adjuster](hair-set-adjuster.md) の「頭ボーンに合わせる」と「めり込みが少ない位置を探す」を使ってください。
+    [07_Hair Set Adjuster](hair-set-adjuster.md) の「自動で合わせる」を使ってください。
     角度や大きさは、顔の色を変えて境目を見ながらスライダーで調整できます。
 
 ## 元のファイルを壊したくない
