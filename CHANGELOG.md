@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.8.1] - 2026-10-05
+
+### Added
+
+- Hair Set Adjuster: automatic fitting of hair position and scale, starting from the head bone and reducing penetration, exposed scalp and floating hair, with an option to keep the scale.
+- Hair Set Adjuster: the face tint now also shows the parts hidden behind the hair, semi-transparent.
+- Hair Set Adjuster: penetrating hair faces are shown as filled triangles, selectable with points.
+
+### Changed
+
+- Hair Set Adjuster: sliders now recenter on the current value after each drag, with three selectable widths and a number field independent of the slider range.
+
+### Removed
+
+- Hair Set Adjuster: "snap to head bone" and the penetration-based position search, replaced by automatic fitting.
+
 ## [0.8.0] - 2026-10-04
 
 ### Added
