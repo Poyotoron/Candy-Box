@@ -197,6 +197,7 @@ namespace Poyo.CandyBox.FaceEmoSplitter.Editor
             {
                 Path = path,
                 Name = Path.GetFileNameWithoutExtension(path),
+                NameContent = new GUIContent(Path.GetFileNameWithoutExtension(path)),
                 Asset = AssetDatabase.LoadAssetAtPath<GameObject>(path),
                 Parent = parent,
                 Depth = parent == null ? 0 : parent.Depth + 1
@@ -205,6 +206,19 @@ namespace Poyo.CandyBox.FaceEmoSplitter.Editor
 
         private static void AddDepthFirst(FaceEmoSplitterTree tree, FaceEmoSplitterNode node)
         {
+            node.IsLastChild = node.Parent == null ||
+                node.Parent.Children[node.Parent.Children.Count - 1] == node;
+            node.Continues = new bool[node.Depth];
+            if (node.Parent != null)
+            {
+                System.Array.Copy(node.Parent.Continues, node.Continues, node.Parent.Continues.Length);
+                if (node.Depth >= 2)
+                {
+                    // NOTE: 末尾の要素は自分の枝用に空け、親の枝が続くかをその一つ手前に写す。
+                    node.Continues[node.Depth - 2] = !node.Parent.IsLastChild;
+                }
+            }
+
             tree.Nodes.Add(node);
             node.Children.Sort((left, right) => string.CompareOrdinal(left.Name, right.Name));
             foreach (FaceEmoSplitterNode child in node.Children)

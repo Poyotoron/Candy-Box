@@ -41,6 +41,12 @@ namespace Poyo.CandyBox.FaceEmoSplitter.Editor
         internal FaceEmoSplitterNode Parent;
         internal readonly List<FaceEmoSplitterNode> Children = new List<FaceEmoSplitterNode>();
         internal int Depth;
+        internal bool IsLastChild;
+        internal bool[] Continues;
+        internal GUIContent NameContent;
+        internal GUIContent StatusContent;
+        internal GUIContent ChipContent;
+        internal bool IsStar;
         internal int ExpressionCount;
         internal string ExpressionName;
         internal string ExpressionSource;
@@ -54,7 +60,6 @@ namespace Poyo.CandyBox.FaceEmoSplitter.Editor
         internal int Effective;
         internal bool IsOrigin;
         internal int AssignIndex;
-        internal string EffectiveLabel;
         internal string RowStatus;
     }
 
@@ -76,5 +81,6 @@ namespace Poyo.CandyBox.FaceEmoSplitter.Editor
         internal string OriginLabel;
         internal string StarLabel;
         internal string SourceLabel;
+        internal GUIContent ChipContent;
     }
 }

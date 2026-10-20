@@ -233,6 +233,7 @@ namespace Poyo.CandyBox.FaceEmoSplitter.Editor
                     label.Star.Name + " / " + label.Star.Launchers[0].gameObject.name;
                 label.SourceLabel = string.IsNullOrEmpty(label.Source) ? "まだ作られていません" : Path.GetFileName(label.Source);
                 label.OriginLabel = "起点 " + label.OriginCount;
+                label.ChipContent = new GUIContent(label.Name);
             }
 
             AssignOptions = new GUIContent[_labels.Count + 2];
@@ -247,11 +248,13 @@ namespace Poyo.CandyBox.FaceEmoSplitter.Editor
             {
                 int index = _labels.FindIndex(label => label.Index == node.Assigned);
                 node.AssignIndex = node.Assigned == Inherit || index < 0 ? 0 : index + 1;
-                node.EffectiveLabel = node.Assigned == Inherit
-                    ? "(" + FaceEmoSplitterNames.LabelName(node.Effective) + ")" : null;
+                FaceEmoSplitterLabel effective = Find(node.Effective);
+                node.ChipContent = effective == null ? null : effective.ChipContent;
+                node.IsStar = effective != null && effective.Star == node;
                 node.RowStatus = node.IsOrigin
                     ? "起点" + (string.IsNullOrEmpty(node.StatusLabel) ? "" : "、" + node.StatusLabel)
                     : node.StatusLabel;
+                node.StatusContent = new GUIContent(node.RowStatus);
             }
         }
     }
