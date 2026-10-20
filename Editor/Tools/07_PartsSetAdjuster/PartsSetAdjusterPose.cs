@@ -1,18 +1,18 @@
 using UnityEditor;
 using UnityEngine;
 
-namespace Poyo.CandyBox.HairSetAdjuster.Editor
+namespace Poyo.CandyBox.PartsSetAdjuster.Editor
 {
-    internal static class HairSetAdjusterPose
+    internal static class PartsSetAdjusterPose
     {
-        internal static HairSetBasePose Capture(HairSetTarget target)
+        internal static PartsSetBasePose Capture(PartsSetTarget target)
         {
             if (target == null || !target.IsValid || target.AdjustTarget == null)
             {
                 return default;
             }
 
-            return new HairSetBasePose
+            return new PartsSetBasePose
             {
                 Position = target.AdjustTarget.position,
                 Rotation = target.AdjustTarget.rotation,
@@ -23,7 +23,7 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
             };
         }
 
-        internal static void Apply(HairSetTarget target, HairSetBasePose basePose, HairSetOffset offset)
+        internal static void Apply(PartsSetTarget target, PartsSetBasePose basePose, PartsSetOffset offset)
         {
             Quaternion r = basePose.RootRotation;
             Quaternion rr = r * Quaternion.Euler(offset.Angles) * Quaternion.Inverse(r);
@@ -34,13 +34,13 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
                 rr,
                 basePose.Rotation,
                 scale,
-                basePose.Position + r * offset.Position - target.HeadCenter);
-            target.AdjustTarget.SetPositionAndRotation(target.HeadCenter + v, rr * basePose.Rotation);
+                basePose.Position + r * offset.Position - target.ReferenceCenter);
+            target.AdjustTarget.SetPositionAndRotation(target.ReferenceCenter + v, rr * basePose.Rotation);
             target.AdjustTarget.localScale = Vector3.Scale(basePose.LocalScale, scale);
             PrefabUtility.RecordPrefabInstancePropertyModifications(target.AdjustTarget);
         }
 
-        internal static HairSetOffset Solve(HairSetTarget target, HairSetBasePose basePose)
+        internal static PartsSetOffset Solve(PartsSetTarget target, PartsSetBasePose basePose)
         {
             Quaternion r = basePose.RootRotation;
             Quaternion rr = target.AdjustTarget.rotation * Quaternion.Inverse(basePose.Rotation);
@@ -51,7 +51,7 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
                 Divide(current.x, original.x),
                 Divide(current.y, original.y),
                 Divide(current.z, original.z));
-            HairSetOffset offset = HairSetOffset.Identity;
+            PartsSetOffset offset = PartsSetOffset.Identity;
             offset.Angles = new Vector3(SignedAngle(angles.x), SignedAngle(angles.y), SignedAngle(angles.z));
             if (Mathf.Abs(scale.x - scale.y) <= 1e-4f &&
                 Mathf.Abs(scale.x - scale.z) <= 1e-4f &&
@@ -65,12 +65,12 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
             }
 
             offset.Position = Quaternion.Inverse(r) *
-                (Inverse(basePose, offset, target.AdjustTarget.position - target.HeadCenter) -
-                    (basePose.Position - target.HeadCenter));
+                (Inverse(basePose, offset, target.AdjustTarget.position - target.ReferenceCenter) -
+                    (basePose.Position - target.ReferenceCenter));
             return offset;
         }
 
-        internal static bool HasRootMoved(HairSetTarget target, HairSetBasePose basePose)
+        internal static bool HasRootMoved(PartsSetTarget target, PartsSetBasePose basePose)
         {
             return Vector3.Distance(target.AvatarRoot.transform.position, basePose.RootPosition) > 1e-4f ||
                 Quaternion.Angle(target.AvatarRoot.transform.rotation, basePose.RootRotation) > 0.01f;
@@ -81,7 +81,7 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
             return rr * (a * Vector3.Scale(s, Quaternion.Inverse(a) * v));
         }
 
-        internal static Vector3 Inverse(HairSetBasePose basePose, HairSetOffset offset, Vector3 worldDelta)
+        internal static Vector3 Inverse(PartsSetBasePose basePose, PartsSetOffset offset, Vector3 worldDelta)
         {
             Quaternion r = basePose.RootRotation;
             Quaternion rr = r * Quaternion.Euler(offset.Angles) * Quaternion.Inverse(r);
@@ -91,7 +91,7 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
             return a * Vector3.Scale(v, new Vector3(Divide(1f, s.x), Divide(1f, s.y), Divide(1f, s.z)));
         }
 
-        internal static Vector3 WorldDeltaToOffset(HairSetBasePose basePose, HairSetOffset offset, Vector3 worldDelta)
+        internal static Vector3 WorldDeltaToOffset(PartsSetBasePose basePose, PartsSetOffset offset, Vector3 worldDelta)
         {
             // NOTE: ワールドでの移動量も回転と拡大の逆写像を通さないと、頭合わせと探索が狙った位置へ届かない。
             return Quaternion.Inverse(basePose.RootRotation) * Inverse(basePose, offset, worldDelta);

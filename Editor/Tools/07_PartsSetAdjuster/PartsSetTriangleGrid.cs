@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace Poyo.CandyBox.HairSetAdjuster.Editor
+namespace Poyo.CandyBox.PartsSetAdjuster.Editor
 {
-    internal sealed class HairSetTriangleGrid
+    internal sealed class PartsSetTriangleGrid
     {
         private const float CellSize = 0.01f;
         private const float RayStep = 0.0025f;
@@ -14,7 +14,7 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
         private readonly int[] _visited;
         private int _visitId;
 
-        internal HairSetTriangleGrid(Vector3[] vertices, int[] triangles)
+        internal PartsSetTriangleGrid(Vector3[] vertices, int[] triangles)
         {
             _vertices = vertices;
             _triangles = triangles;

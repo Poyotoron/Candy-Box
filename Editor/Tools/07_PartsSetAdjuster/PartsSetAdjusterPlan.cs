@@ -2,34 +2,53 @@ using System.Collections.Generic;
 using UnityEngine;
 using VRC.Dynamics;
 
-namespace Poyo.CandyBox.HairSetAdjuster.Editor
+namespace Poyo.CandyBox.PartsSetAdjuster.Editor
 {
-    internal sealed class HairSetTarget
+    internal enum PartsSetKind
     {
-        internal SkinnedMeshRenderer Face;
-        internal GameObject Hair;
+        Hair,
+        Other
+    }
+
+    internal enum PartsSetMoveRange
+    {
+        Whole,
+        Bone,
+        Mesh
+    }
+
+    internal sealed class PartsSetTarget
+    {
+        internal PartsSetKind Kind;
+        internal HumanBodyBones ReferencePart;
+        internal string ReferencePartName;
+        internal PartsSetMoveRange MoveRange;
+        internal Renderer MoveMesh;
+        internal string CoMovingLabel;
+        internal SkinnedMeshRenderer ReferenceMesh;
+        internal GameObject Part;
         internal GameObject AvatarRoot;
         internal Animator Animator;
-        internal Transform HeadBone;
-        internal Transform HairHeadBone;
+        internal Transform ReferenceBone;
+        internal Transform PartReferenceBone;
         internal Transform AdjustTarget;
         internal string AdjustTargetLabel;
-        internal int[] HeadVertexIndices;
-        internal Vector3 HeadCenter;
+        internal int[] ReferenceVertexIndices;
+        internal Vector3 ReferenceCenter;
         internal HashSet<string> HumanoidBoneNames;
         internal string BlockedReason;
         internal bool IsValid => BlockedReason == null;
     }
 
     [System.Serializable]
-    internal struct HairSetOffset
+    internal struct PartsSetOffset
     {
         // アバタールートの軸で右・上・前を表す（m）。
         [SerializeField] internal Vector3 Position;
         [SerializeField] internal Vector3 Angles;
         [SerializeField] internal float Scale;
         [SerializeField] internal Vector3 AxisScale;
-        internal static HairSetOffset Identity => new HairSetOffset
+        internal static PartsSetOffset Identity => new PartsSetOffset
         {
             Position = Vector3.zero,
             Angles = Vector3.zero,
@@ -38,7 +57,7 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
         };
     }
 
-    internal struct HairSetBasePose
+    internal struct PartsSetBasePose
     {
         internal Vector3 Position;
         internal Quaternion Rotation;
@@ -48,7 +67,7 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
         internal bool IsValid;
     }
 
-    internal sealed class HairSetPenetrationResult
+    internal sealed class PartsSetPenetrationResult
     {
         internal Mesh FaceMesh;
         internal int FaceTriangleCount;
@@ -59,7 +78,7 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
         internal int PoseVersion;
     }
 
-    internal sealed class HairSetFitResult
+    internal sealed class PartsSetFitResult
     {
         internal bool Succeeded;
         internal string FailureReason;
@@ -68,17 +87,17 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
         internal float Scale;
     }
 
-    internal sealed class HairSetColliderRow
+    internal sealed class PartsSetColliderRow
     {
-        internal VRCPhysBoneColliderBase HairCollider;
+        internal VRCPhysBoneColliderBase PartCollider;
         internal VRCPhysBoneColliderBase AvatarCollider;
         internal bool Selected;
         internal string Label;
     }
 
-    internal sealed class HairSetColliderPlan
+    internal sealed class PartsSetColliderPlan
     {
-        internal List<HairSetColliderRow> Rows = new List<HairSetColliderRow>();
+        internal List<PartsSetColliderRow> Rows = new List<PartsSetColliderRow>();
         internal int PoseVersion;
         internal string SummaryLabel;
     }

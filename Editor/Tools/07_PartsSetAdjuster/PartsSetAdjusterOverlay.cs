@@ -3,11 +3,11 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace Poyo.CandyBox.HairSetAdjuster.Editor
+namespace Poyo.CandyBox.PartsSetAdjuster.Editor
 {
-    internal sealed class HairSetFaceOverlay
+    internal sealed class PartsSetFaceOverlay
     {
-        private SkinnedMeshRenderer _face;
+        private SkinnedMeshRenderer _referenceMesh;
         private Mesh _mesh;
         private Material _material;
         private Mesh _hiddenMesh;
@@ -16,10 +16,10 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
         private bool _hasHiddenTriangles;
         private double _lastBakeTime;
         internal bool IsActive => _mesh != null && _material != null;
-        internal void Begin(SkinnedMeshRenderer face, Color color, int[] headVertexIndices, Vector3 headCenter, bool showHidden)
+        internal void Begin(SkinnedMeshRenderer referenceMesh, Color color, int[] referenceVertexIndices, Vector3 referenceCenter, bool showHidden)
         {
             End();
-            if (face == null || face.sharedMesh == null)
+            if (referenceMesh == null || referenceMesh.sharedMesh == null)
             {
                 return;
             }
@@ -27,11 +27,11 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
             Shader shader = Shader.Find("Hidden/Internal-Colored");
             if (shader == null)
             {
-                Debug.LogWarning("Candy Box: 顔の重ね描きに使うシェーダーが見つかりませんでした。");
+                Debug.LogWarning("Candy Box: 肌の重ね描きに使うシェーダーが見つかりませんでした。");
                 return;
             }
 
-            _face = face;
+            _referenceMesh = referenceMesh;
             _material = new Material(shader)
             {
                 hideFlags = HideFlags.HideAndDontSave,
@@ -69,7 +69,7 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
             try
             {
                 Bake();
-                SelectHiddenTriangles(headVertexIndices, headCenter);
+                SelectHiddenTriangles(referenceVertexIndices, referenceCenter);
             }
             catch
             {
@@ -104,17 +104,17 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
             }
         }
 
-        private void SelectHiddenTriangles(int[] headVertexIndices, Vector3 headCenter)
+        private void SelectHiddenTriangles(int[] referenceVertexIndices, Vector3 referenceCenter)
         {
             Vector3[] vertices = _mesh.vertices;
             var isHead = new bool[vertices.Length];
-            foreach (int index in headVertexIndices)
+            foreach (int index in referenceVertexIndices)
             {
                 isHead[index] = true;
             }
 
             Vector3 localCenter = Matrix4x4.TRS(
-                _face.transform.position, _face.transform.rotation, Vector3.one).inverse.MultiplyPoint3x4(headCenter);
+                _referenceMesh.transform.position, _referenceMesh.transform.rotation, Vector3.one).inverse.MultiplyPoint3x4(referenceCenter);
             var triangles = new List<int>();
             for (int s = 0; s < _mesh.subMeshCount; s++)
             {
@@ -148,7 +148,7 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
 
         private void Bake()
         {
-            _face.BakeMesh(_mesh, true);
+            _referenceMesh.BakeMesh(_mesh, true);
             Vector3[] vertices = _mesh.vertices;
             Vector3[] normals = _mesh.normals;
             // NOTE: 元の顔と同じ深さでは Z ファイティングするため、わずかに押し出す。
@@ -175,7 +175,7 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
                 return;
             }
 
-            if (_face == null || _mesh == null || _material == null)
+            if (_referenceMesh == null || _mesh == null || _material == null)
             {
                 End();
                 return;
@@ -188,7 +188,7 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
             }
 
             // NOTE: BakeMesh は拡大を焼き込むので、行列には拡大を含めない。
-            Matrix4x4 matrix = Matrix4x4.TRS(_face.transform.position, _face.transform.rotation, Vector3.one);
+            Matrix4x4 matrix = Matrix4x4.TRS(_referenceMesh.transform.position, _referenceMesh.transform.rotation, Vector3.one);
             for (int i = 0; i < _mesh.subMeshCount; i++)
             {
                 Graphics.DrawMesh(_mesh, matrix, _material, 0, sceneView.camera, i);
@@ -230,7 +230,7 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
             _hiddenMesh = null;
             _hiddenMaterial = null;
             _hasHiddenTriangles = false;
-            _face = null;
+            _referenceMesh = null;
             if (wasActive)
             {
                 SceneView.RepaintAll();
