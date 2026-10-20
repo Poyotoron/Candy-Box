@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System;
 using System.Text;
+using System.IO;
 using UnityEditor;
 using UnityEngine;
 
@@ -17,6 +18,9 @@ namespace Poyo.CandyBox.FaceEmoSplitter.Editor
         private static readonly GUIContent ChangedContent = new GUIContent("*");
         private static readonly GUIContent ApplyLabelContent = new GUIContent("適用する");
         private static readonly GUIContent ApplyContent = new GUIContent("アバターに適用");
+        private static readonly GUIContent KeepMenuContent = new GUIContent("MA Menu Installer の設定を維持する", "適用のたびに FaceEmo が作り直す MA Menu Installer の、インストール先と有効・無効を引き継ぎます。");
+        private static readonly GUIContent SettingsContent = new GUIContent("設定ファイル");
+        private static readonly GUIContent SaveContent = new GUIContent("保存");
         private static readonly GUIContent NoneContent = new GUIContent("なし");
         private static readonly GUIContent[] ColumnContents =
         {
@@ -50,6 +54,11 @@ namespace Poyo.CandyBox.FaceEmoSplitter.Editor
         private float _statusWidth = 120f;
         private float _treeWidth;
         [SerializeField] private GameObject _input;
+        [SerializeField] private bool _keepMenuInstaller = true;
+        [SerializeField] private TextAsset _settingsFile;
+        private string _savedJson;
+        private bool _settingsDirty;
+        private string _settingsNotice;
         private FaceEmoSplitterTree _tree;
         private FaceEmoSplitterLabels _labels;
         private string _error;
@@ -77,6 +86,8 @@ namespace Poyo.CandyBox.FaceEmoSplitter.Editor
             EditorApplication.delayCall -= Load;
             EditorApplication.delayCall -= Apply;
             EditorApplication.delayCall -= UpdateValidation;
+            EditorApplication.delayCall -= SaveSettings;
+            EditorApplication.delayCall -= UpdateDirty;
         }
 
         private void OnFocus()
@@ -89,6 +100,39 @@ namespace Poyo.CandyBox.FaceEmoSplitter.Editor
             EnsureStyles();
             _tree = FaceEmoSplitterScanner.Scan(_input, out _error);
             _labels = _tree == null ? null : new FaceEmoSplitterLabels(_tree);
+            _settingsNotice = null;
+            _savedJson = null;
+            if (_tree != null)
+            {
+                FaceEmoSplitterSettingsData data = FaceEmoSplitterSettings.Read(_settingsFile);
+                if (_settingsFile != null && (data == null ||
+                    data.rootGuid != AssetDatabase.AssetPathToGUID(_tree.Root.Path)))
+                {
+                    // NOTE: ウィンドウに残った別の系統のファイルへ、指定を混ぜたり上書きしたりしない。
+                    _settingsNotice = "設定ファイル「" + Path.GetFileName(AssetDatabase.GetAssetPath(_settingsFile)) +
+                        "」は別のアバターのものなので、使いませんでした。";
+                    _settingsFile = null;
+                }
+
+                if (_settingsFile == null)
+                {
+                    _settingsFile = FaceEmoSplitterSettings.Find(_tree);
+                    data = FaceEmoSplitterSettings.Read(_settingsFile);
+                }
+
+                if (data != null)
+                {
+                    _labels.ApplySaved(data, out int missing);
+                    _keepMenuInstaller = data.keepMenuInstaller;
+                    _savedJson = FaceEmoSplitterSettings.ToJson(data);
+                    if (missing > 0)
+                    {
+                        _settingsNotice = "保存した設定のうち、見つからない Variant が " + missing + " 件ありました。";
+                    }
+                }
+            }
+
+            UpdateDirty();
             MeasureColumns();
             _collapsed.Clear();
             _result = null;
@@ -112,6 +156,31 @@ namespace Poyo.CandyBox.FaceEmoSplitter.Editor
             }
 
             EditorGUILayout.LabelField(ReloadContent, EditorStyles.miniLabel);
+            EditorGUILayout.BeginHorizontal();
+            EditorGUI.BeginChangeCheck();
+            _settingsFile = (TextAsset)EditorGUILayout.ObjectField(SettingsContent, _settingsFile, typeof(TextAsset), false);
+            if (EditorGUI.EndChangeCheck())
+            {
+                EditorApplication.delayCall += Load;
+            }
+
+            EditorGUI.BeginDisabledGroup(_tree == null || EditorApplication.isCompiling || _applying);
+            if (GUILayout.Button(SaveContent, GUILayout.ExpandWidth(false)))
+            {
+                EditorApplication.delayCall += SaveSettings;
+            }
+
+            EditorGUI.EndDisabledGroup();
+            if (_settingsDirty)
+            {
+                GUILayout.Label(ChangedContent, GUILayout.ExpandWidth(false));
+            }
+
+            EditorGUILayout.EndHorizontal();
+            if (_settingsNotice != null)
+            {
+                EditorGUILayout.HelpBox(_settingsNotice, MessageType.Info);
+            }
             if (_error != null)
             {
                 EditorGUILayout.HelpBox(_error, MessageType.Warning);
@@ -134,8 +203,7 @@ namespace Poyo.CandyBox.FaceEmoSplitter.Editor
                     bool apply = EditorGUILayout.ToggleLeft(ApplyLabelContent, label.Apply, GUILayout.ExpandWidth(false));
                     if (apply != label.Apply)
                     {
-                        _labels.SetApply(label, apply);
-                        EditorApplication.delayCall += UpdateValidation;
+                        EditorApplication.delayCall += () => ChangeApply(label, apply);
                     }
 
                     EditorGUI.EndDisabledGroup();
@@ -144,6 +212,11 @@ namespace Poyo.CandyBox.FaceEmoSplitter.Editor
             }
 
             EditorGUI.BeginDisabledGroup(_tree == null || EditorApplication.isCompiling || _applying);
+            bool keep = EditorGUILayout.ToggleLeft(KeepMenuContent, _keepMenuInstaller);
+            if (keep != _keepMenuInstaller)
+            {
+                EditorApplication.delayCall += () => ChangeKeepMenuInstaller(keep);
+            }
             if (GUILayout.Button(ApplyContent))
             {
                 EditorApplication.delayCall += Apply;
@@ -414,6 +487,7 @@ namespace Poyo.CandyBox.FaceEmoSplitter.Editor
             }
 
             _labels.SetAssigned(node, index);
+            UpdateDirty();
             UpdateValidation();
             Repaint();
         }
@@ -426,8 +500,94 @@ namespace Poyo.CandyBox.FaceEmoSplitter.Editor
             }
 
             _labels.SetStar(node);
+            UpdateDirty();
             UpdateValidation();
             Repaint();
+        }
+
+        private void ChangeApply(FaceEmoSplitterLabel label, bool value)
+        {
+            if (this == null || _labels == null || _labels.Find(label.Index) != label)
+            {
+                return;
+            }
+
+            _labels.SetApply(label, value);
+            UpdateDirty();
+            UpdateValidation();
+        }
+
+        private void ChangeKeepMenuInstaller(bool value)
+        {
+            if (this == null)
+            {
+                return;
+            }
+
+            _keepMenuInstaller = value;
+            UpdateDirty();
+            Repaint();
+        }
+
+        private void UpdateDirty()
+        {
+            _settingsDirty = _tree != null && FaceEmoSplitterSettings.ToJson(
+                FaceEmoSplitterSettings.Capture(_tree, _labels, _keepMenuInstaller, Array.Empty<int>())) != _savedJson;
+        }
+
+        private void SaveSettings()
+        {
+            if (_tree == null || EditorApplication.isPlayingOrWillChangePlaymode || EditorApplication.isCompiling)
+            {
+                return;
+            }
+
+            if (!IsCurrentSettingsFile())
+            {
+                _settingsFile = null;
+            }
+
+            string path = _settingsFile == null ? "" : AssetDatabase.GetAssetPath(_settingsFile);
+            if (_settingsFile == null)
+            {
+                string inputPath = _input == null ? _tree.Root.Path :
+                    PrefabUtility.IsPartOfPrefabAsset(_input) ? AssetDatabase.GetAssetPath(_input) :
+                    PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(_input);
+                path = EditorUtility.SaveFilePanelInProject("ラベル分けの設定を保存",
+                    Path.GetFileNameWithoutExtension(inputPath) + ".FaceEmoSplitter", "json",
+                    "保存先を選んでください。", Path.GetDirectoryName(inputPath));
+                if (string.IsNullOrEmpty(path))
+                {
+                    return;
+                }
+            }
+
+            try
+            {
+                FaceEmoSplitterSettingsData data = FaceEmoSplitterSettings.Capture(
+                    _tree, _labels, _keepMenuInstaller, Array.Empty<int>());
+                _settingsFile = FaceEmoSplitterSettings.Write(path, data);
+                _savedJson = FaceEmoSplitterSettings.ToJson(data);
+                _settingsDirty = false;
+                Repaint();
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+                EditorUtility.DisplayDialog("Candy Box", "設定を保存できませんでした。\n" + exception.Message, "OK");
+            }
+        }
+
+        private bool IsCurrentSettingsFile()
+        {
+            if (_tree == null || _settingsFile == null)
+            {
+                return false;
+            }
+
+            // NOTE: 読み込み後に欄やファイルが変わっても、別の系統の設定には書き込まない。
+            FaceEmoSplitterSettingsData data = FaceEmoSplitterSettings.Read(_settingsFile);
+            return data != null && data.rootGuid == AssetDatabase.AssetPathToGUID(_tree.Root.Path);
         }
 
         private void UpdateValidation()
@@ -475,11 +635,34 @@ namespace Poyo.CandyBox.FaceEmoSplitter.Editor
                 return;
             }
 
+            ApplyConfirmed();
+        }
+
+        private void ApplyConfirmed()
+        {
             _applying = true;
+            bool succeeded = false;
+            string settingsPath = null;
             int saved = 0;
             var generated = new List<string>();
+            var generatedIndices = new List<int>();
+            var kept = new List<string>();
             try
             {
+                FaceEmoSplitterMenuInstaller.ResetWarning();
+                var snapshots = new Dictionary<int, FaceEmoSplitterMenuSnapshot>();
+                if (_keepMenuInstaller)
+                {
+                    // NOTE: 生成のたびに値が初期化されるため、一時オブジェクトが置かれる前に毎回覚える。
+                    foreach (FaceEmoSplitterLabel label in _labels.Labels)
+                    {
+                        if (label.Apply)
+                        {
+                            snapshots[label.Index] = FaceEmoSplitterMenuInstaller.Capture(label.Star.Instances[0]);
+                        }
+                    }
+                }
+
                 FaceEmoSplitterGenerator.ResolvePrefabs(_labels);
                 foreach (FaceEmoSplitterLabel label in _labels.Labels)
                 {
@@ -495,12 +678,31 @@ namespace Poyo.CandyBox.FaceEmoSplitter.Editor
                     }
 
                     generated.Add(label.Name);
+                    generatedIndices.Add(label.Index);
+                    if (snapshots.TryGetValue(label.Index, out FaceEmoSplitterMenuSnapshot snapshot) &&
+                        FaceEmoSplitterMenuInstaller.Restore(label.Star.Launchers[0].AV3Setting.MARootObjectPrefab, snapshot))
+                    {
+                        kept.Add(label.Name);
+                    }
                 }
 
                 saved = FaceEmoSplitterPlacer.Place(_tree, _labels, out string placementError);
                 if (placementError != null)
                 {
                     EditorUtility.DisplayDialog("Candy Box", placementError, "OK");
+                }
+                else
+                {
+                    if (IsCurrentSettingsFile())
+                    {
+                        // NOTE: 先に新しい表情の出どころを保存し、読み戻してもラベルの文字を保つ。
+                        string path = AssetDatabase.GetAssetPath(_settingsFile);
+                        _settingsFile = FaceEmoSplitterSettings.Write(path,
+                            FaceEmoSplitterSettings.Capture(_tree, _labels, _keepMenuInstaller, generatedIndices));
+                        settingsPath = path;
+                    }
+
+                    succeeded = true;
                 }
             }
             catch (Exception exception)
@@ -514,9 +716,24 @@ namespace Poyo.CandyBox.FaceEmoSplitter.Editor
                 {
                     AssetDatabase.SaveAssets();
                     Load();
+                    if (succeeded && settingsPath != null && IsCurrentSettingsFile() &&
+                        AssetDatabase.GetAssetPath(_settingsFile) == settingsPath)
+                    {
+                        // NOTE: 読み戻しで不要になったラベルを消すため再保存し、適用直後の未保存の印を防ぐ。
+                        FaceEmoSplitterSettingsData data = FaceEmoSplitterSettings.Capture(
+                            _tree, _labels, _keepMenuInstaller, Array.Empty<int>());
+                        _settingsFile = FaceEmoSplitterSettings.Write(settingsPath, data);
+                        _savedJson = FaceEmoSplitterSettings.ToJson(data);
+                        _settingsDirty = false;
+                    }
+
                     _result = "表情を作り直したラベル: " +
                         (generated.Count == 0 ? "なし" : string.Join(", ", generated)) +
                         " / 書き換えた Prefab: " + saved + " 件";
+                    if (kept.Count > 0)
+                    {
+                        _result += " / Menu Installer の設定を引き継いだラベル: " + string.Join(", ", kept);
+                    }
                 }
                 finally
                 {

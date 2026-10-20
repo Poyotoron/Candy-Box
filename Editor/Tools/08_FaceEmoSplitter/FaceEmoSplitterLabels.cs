@@ -71,6 +71,116 @@ namespace Poyo.CandyBox.FaceEmoSplitter.Editor
             Recompute();
         }
 
+        internal void ApplySaved(FaceEmoSplitterSettingsData data, out int missing)
+        {
+            missing = 0;
+            var sourceIndices = new Dictionary<string, int>();
+            var reserved = new HashSet<int>();
+            foreach (FaceEmoSplitterSavedLabel saved in data.labels)
+            {
+                reserved.Add(saved.index);
+                if (!string.IsNullOrEmpty(saved.sourceGuid))
+                {
+                    sourceIndices[saved.sourceGuid] = saved.index;
+                }
+            }
+
+            var remap = new Dictionary<int, int>();
+            foreach (FaceEmoSplitterLabel label in _labels)
+            {
+                string guid = AssetDatabase.AssetPathToGUID(label.Source);
+                if (!sourceIndices.TryGetValue(guid, out int index))
+                {
+                    index = 0;
+                    while (reserved.Contains(index))
+                    {
+                        index++;
+                    }
+                }
+
+                reserved.Add(index);
+                remap[label.Index] = index;
+                label.Index = index;
+                label.Name = FaceEmoSplitterNames.LabelName(index);
+            }
+
+            foreach (FaceEmoSplitterNode node in _tree.Nodes)
+            {
+                if (node.CurrentLabel >= 0)
+                {
+                    node.CurrentLabel = remap[node.CurrentLabel];
+                }
+
+                if (node.Assigned >= 0)
+                {
+                    node.Assigned = remap[node.Assigned];
+                }
+
+                if (node.InitialAssigned >= 0)
+                {
+                    node.InitialAssigned = remap[node.InitialAssigned];
+                }
+            }
+
+            foreach (FaceEmoSplitterSavedLabel saved in data.labels)
+            {
+                if (string.IsNullOrEmpty(saved.sourceGuid) && Find(saved.index) == null)
+                {
+                    _labels.Add(new FaceEmoSplitterLabel
+                    {
+                        Index = saved.index,
+                        Name = FaceEmoSplitterNames.LabelName(saved.index)
+                    });
+                }
+            }
+
+            _labels.Sort((left, right) => left.Index.CompareTo(right.Index));
+            var nodesByGuid = new Dictionary<string, FaceEmoSplitterNode>();
+            foreach (FaceEmoSplitterNode node in _tree.Nodes)
+            {
+                node.Assigned = Inherit;
+                nodesByGuid[AssetDatabase.AssetPathToGUID(node.Path)] = node;
+            }
+
+            foreach (FaceEmoSplitterSavedNode saved in data.nodes)
+            {
+                if (!string.IsNullOrEmpty(saved.guid) &&
+                    nodesByGuid.TryGetValue(saved.guid, out FaceEmoSplitterNode node) && Find(saved.assigned) != null)
+                {
+                    node.Assigned = saved.assigned;
+                }
+                else
+                {
+                    missing++;
+                }
+            }
+
+            foreach (FaceEmoSplitterSavedLabel saved in data.labels)
+            {
+                FaceEmoSplitterLabel label = Find(saved.index);
+                if (label == null)
+                {
+                    continue;
+                }
+
+                if (!string.IsNullOrEmpty(saved.starGuid))
+                {
+                    if (nodesByGuid.TryGetValue(saved.starGuid, out FaceEmoSplitterNode star) && star.Launchers.Count > 0)
+                    {
+                        label.Star = star;
+                    }
+                    else
+                    {
+                        missing++;
+                    }
+                }
+
+                label.Apply = saved.apply;
+            }
+
+            Recompute(true);
+        }
+
         internal void SetStar(FaceEmoSplitterNode node)
         {
             if (node.Launchers.Count == 0 || node.Effective < 0)
@@ -182,7 +292,7 @@ namespace Poyo.CandyBox.FaceEmoSplitter.Editor
             return null;
         }
 
-        private void Recompute()
+        private void Recompute(bool preserveApply = false)
         {
             var used = new HashSet<int>();
             foreach (FaceEmoSplitterNode node in _tree.Nodes)
@@ -221,10 +331,14 @@ namespace Poyo.CandyBox.FaceEmoSplitter.Editor
 
                     label.Star = count == 1 ? candidate : null;
                     // NOTE: 配布元など担当のないラベルまで ON にすると、担当未指定で毎回止まってしまう。
-                    label.Apply = label.Star != null;
+                    // NOTE: 保存値の読み戻しでは、担当を自動選択しても保存した OFF を保つ。
+                    if (!preserveApply)
+                    {
+                        label.Apply = label.Star != null;
+                    }
                 }
 
-                if (label.OriginCount == 0)
+                if (label.Star == null || label.OriginCount == 0)
                 {
                     label.Apply = false;
                 }
