@@ -26,6 +26,11 @@
             "name": "com.vrchat.base",
             "expression": "3.5.0",
             "define": "CANDY_BOX_HAS_VRCSDK"
+        },
+        {
+            "name": "jp.suzuryg.face-emo",
+            "expression": "[1.7.0,2.0.0)",
+            "define": "CANDY_BOX_HAS_FACEEMO"
         }
     ],
     "noEngineReferences": false
