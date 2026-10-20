@@ -2,9 +2,9 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
-namespace Poyo.CandyBox.HairSetAdjuster.Editor
+namespace Poyo.CandyBox.PartsSetAdjuster.Editor
 {
-    internal sealed class HairSetHeadField
+    internal sealed class PartsSetReferenceField
     {
         private const float CellSize = 0.01f;
         private const float NearDistance = 0.02f;
@@ -13,28 +13,28 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
         private Vector3[] _points;
         private Vector3[] _normals;
 
-        internal static HairSetHeadField Build(HairSetTarget target)
+        internal static PartsSetReferenceField Build(PartsSetTarget target)
         {
-            var field = new HairSetHeadField();
+            var field = new PartsSetReferenceField();
             var mesh = new Mesh
             {
                 hideFlags = HideFlags.HideAndDontSave
             };
             try
             {
-                target.Face.BakeMesh(mesh, true);
+                target.ReferenceMesh.BakeMesh(mesh, true);
                 Vector3[] vertices = mesh.vertices;
                 Vector3[] normals = mesh.normals;
                 // NOTE: 拡大は焼き込み済みなので位置と回転だけでワールドへ直す。
                 Matrix4x4 matrix = Matrix4x4.TRS(
-                    target.Face.transform.position,
-                    target.Face.transform.rotation,
+                    target.ReferenceMesh.transform.position,
+                    target.ReferenceMesh.transform.rotation,
                     Vector3.one);
-                field._points = new Vector3[target.HeadVertexIndices.Length];
+                field._points = new Vector3[target.ReferenceVertexIndices.Length];
                 field._normals = new Vector3[field._points.Length];
                 for (int i = 0; i < field._points.Length; i++)
                 {
-                    int index = target.HeadVertexIndices[i];
+                    int index = target.ReferenceVertexIndices[i];
                     Vector3 p = matrix.MultiplyPoint3x4(vertices[index]);
                     field._points[i] = p;
                     field._normals[i] = index < normals.Length
@@ -103,9 +103,9 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
         }
     }
 
-    internal static class HairSetAdjusterPenetration
+    internal static class PartsSetAdjusterPenetration
     {
-        internal static void CollectHairMesh(GameObject hair, List<Vector3> points, List<int> triangles)
+        internal static void CollectPartMesh(PartsSetTarget target, List<Vector3> points, List<int> triangles)
         {
             var baked = new Mesh
             {
@@ -113,7 +113,7 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
             };
             try
             {
-                foreach (Renderer renderer in hair.GetComponentsInChildren<Renderer>(true))
+                foreach (Renderer renderer in target.Part.GetComponentsInChildren<Renderer>(true))
                 {
                     if (!renderer.enabled || !renderer.gameObject.activeInHierarchy)
                     {
@@ -154,19 +154,37 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
                         }
                     }
 
-                    int baseIndex = points.Count;
-                    foreach (Vector3 vertex in mesh.vertices)
+                    // NOTE: パーツ全体では全頂点を測り、従来の髪の自動調整結果を保つ。
+                    bool[] moving = target.MoveRange == PartsSetMoveRange.Whole
+                        ? null : PartsSetAdjusterTarget.MovingVertices(renderer, target.AdjustTarget);
+                    Vector3[] vertices = mesh.vertices;
+                    var remap = new int[vertices.Length];
+                    for (int i = 0; i < vertices.Length; i++)
                     {
-                        points.Add(matrix.MultiplyPoint3x4(vertex));
+                        remap[i] = -1;
+                        if (moving == null || (i < moving.Length && moving[i]))
+                        {
+                            remap[i] = points.Count;
+                            points.Add(matrix.MultiplyPoint3x4(vertices[i]));
+                        }
                     }
 
                     if (triangles != null)
                     {
                         for (int s = 0; s < mesh.subMeshCount; s++)
                         {
-                            foreach (int index in mesh.GetTriangles(s))
+                            int[] indices = mesh.GetTriangles(s);
+                            for (int i = 0; i < indices.Length; i += 3)
                             {
-                                triangles.Add(baseIndex + index);
+                                int a = remap[indices[i]];
+                                int b = remap[indices[i + 1]];
+                                int c = remap[indices[i + 2]];
+                                if (a >= 0 && b >= 0 && c >= 0)
+                                {
+                                    triangles.Add(a);
+                                    triangles.Add(b);
+                                    triangles.Add(c);
+                                }
                             }
                         }
                     }
@@ -178,14 +196,14 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
             }
         }
 
-        internal static HairSetPenetrationResult Check(HairSetTarget target, int poseVersion, bool buildFaceMesh)
+        internal static PartsSetPenetrationResult Check(PartsSetTarget target, int poseVersion, bool buildFaceMesh)
         {
-            HairSetHeadField field = HairSetHeadField.Build(target);
+            PartsSetReferenceField field = PartsSetReferenceField.Build(target);
             var points = new List<Vector3>();
             var triangles = new List<int>();
-            CollectHairMesh(target.Hair, points, buildFaceMesh ? triangles : null);
+            CollectPartMesh(target, points, buildFaceMesh ? triangles : null);
             var inside = new bool[points.Count];
-            var result = new HairSetPenetrationResult
+            var result = new PartsSetPenetrationResult
             {
                 Total = points.Count,
                 PoseVersion = poseVersion

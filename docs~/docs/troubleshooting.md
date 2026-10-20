@@ -75,11 +75,20 @@
     アップデート前に `06_BlendShape Backuper` でバックアップを取っておくと、キーの並びが変わっても名前で照らし合わせて戻せます。
     メッシュが差し替わった場合は、「すべてのバックアップを表示」にチェックを付けて以前のバックアップを選んでください。
 
-## 07_Hair Set Adjuster の位置合わせについて
+## 07_Parts Set Adjuster の位置合わせについて
 
 ??? question "非対応の髪が沈む・顔にめり込む"
-    [07_Hair Set Adjuster](hair-set-adjuster.md) の「自動で合わせる」を使ってください。
-    角度や大きさは、顔の色を変えて境目を見ながらスライダーで調整できます。
+    [07_Parts Set Adjuster](parts-set-adjuster.md) の「自動で合わせる」を使ってください。
+    髪以外は、基準の部位を選び、肌の色を変えて境目を見ながらスライダーで位置・角度・大きさを調整してください。
+
+## 08_FaceEmo Splitter の適用について
+
+??? question "★が出ない"
+    その Variant をシーンに置き、FaceEmo のランチャーの対象にしてから読み込み直してください。
+    詳しくは [08_FaceEmo Splitter](face-emo-splitter.md) をご覧ください。
+
+??? question "シーンに追加された FaceEmoPrefab があります、と出る"
+    FaceEmo の「アバターに適用」で増えたものです。シーンの Variant の中の FaceEmoPrefab を削除してから読み込み直してください。
 
 ## 元のファイルを壊したくない
 

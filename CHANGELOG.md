@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.9.0] - 2026-10-20
+
+### Added
+
+- FaceEmo Splitter: show the prefab variant tree, label variants and apply FaceEmo expressions per label so a variant's expressions no longer overwrite its base or siblings.
+- FaceEmo Splitter: save the labels, stars and options to a JSON file in the project, matched to variants by asset GUID.
+- FaceEmo Splitter: keep the install target and enabled state of the MA Menu Installer across applies.
+- Parts Set Adjuster: choose the body part to fit against, so hats, tails, wings and bracelets can be fitted as well as hair.
+- Parts Set Adjuster: move only part of an outfit by bone or by mesh, with a list of meshes that move together.
+
+### Changed
+
+- Hair Set Adjuster is renamed to Parts Set Adjuster. The tool ID and its enabled state are kept.
+- Parts Set Adjuster: automatic fitting is available only when the part type is hair.
+
 ## [0.8.1] - 2026-10-05
 
 ### Added

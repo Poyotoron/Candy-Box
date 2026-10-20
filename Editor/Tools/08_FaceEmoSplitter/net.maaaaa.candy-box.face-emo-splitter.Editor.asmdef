@@ -1,0 +1,32 @@
+{
+    "name": "net.maaaaa.candy-box.face-emo-splitter.Editor",
+    "rootNamespace": "Poyo.CandyBox.FaceEmoSplitter.Editor",
+    "references": [
+        "net.maaaaa.candy-box.Editor",
+        "jp.suzuryg.face-emo.appmain.Editor",
+        "jp.suzuryg.face-emo.usecase.Runtime",
+        "jp.suzuryg.face-emo.components.Runtime",
+        "jp.suzuryg.face-emo.domain.Runtime",
+        "jp.suzuryg.face-emo.external.mathijs-bakker.extenject.Runtime"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "CANDY_BOX_TOOL_08",
+        "CANDY_BOX_HAS_FACEEMO"
+    ],
+    "versionDefines": [
+        {
+            "name": "jp.suzuryg.face-emo",
+            "expression": "[1.7.0,2.0.0)",
+            "define": "CANDY_BOX_HAS_FACEEMO"
+        }
+    ],
+    "noEngineReferences": false
+}

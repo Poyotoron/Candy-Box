@@ -67,10 +67,20 @@ namespace Poyo.CandyBox.Editor
 #endif
         private const string VrchatSdkRequirement =
             "VRChat SDK - Base 3.5.0 以降";
-        private static readonly string HairSetAdjusterDescription =
-            @"別のアバター向けに作られた髪を、頭に合わせて取り付けるのを手伝います。
-頭の軸に沿ったスライダーで位置・角度・大きさを調整でき、めり込みの少ない位置を自動で探せます。
-顔を単色で表示して貫通を見やすくし、髪の PhysBone Collider を本体のものへ移すこともできます。";
+#if CANDY_BOX_HAS_FACEEMO
+        private static readonly bool FaceEmoAvailable = true;
+#else
+        private static readonly bool FaceEmoAvailable = false;
+#endif
+        private const string FaceEmoRequirement = "FaceEmo 1.7.0 以降（2.x は未対応）";
+        private static readonly string FaceEmoSplitterDescription =
+            @"FaceEmo の「アバターに適用」は、Prefab Variant の親まで表情を書き込みます。
+Variant の系統を木で表示し、ラベルを付けたまとまりごとに表情を分けて適用します。
+子の Variant で作った表情が、親や兄弟の Variant に入るのを防ぎます。";
+        private static readonly string PartsSetAdjusterDescription =
+            @"別のアバター向けに作られた髪・帽子・しっぽなどを、体に合わせて取り付けるのを手伝います。
+アバターの軸に沿ったスライダーで位置・角度・大きさを調整でき、髪は顔の形を見て自動で合わせられます。
+肌を単色で表示して貫通を見やすくし、パーツの PhysBone Collider を本体のものへ移すこともできます。";
 
         private const string ModularAvatarRequirement =
             "Modular Avatar 1.17.0 以降";
@@ -158,11 +168,18 @@ lilToon と Poiyomi のマテリアルに対応します。導入は必須では
                 BlendShapeBackuperDescription),
             new CandyBoxToolEntry(
                 "07",
-                "07_Hair Set Adjuster",
-                "非対応の髪を、頭に合わせて取り付けます",
-                HairSetAdjusterDescription,
+                "07_Parts Set Adjuster",
+                "別のアバター向けのパーツを、体に合わせて取り付けます",
+                PartsSetAdjusterDescription,
                 VrchatSdkRequirement,
                 VrchatSdkAvailable),
+            new CandyBoxToolEntry(
+                "08",
+                "08_FaceEmo Splitter",
+                "FaceEmo の表情を、Prefab Variant ごとに分けて適用します",
+                FaceEmoSplitterDescription,
+                FaceEmoRequirement,
+                FaceEmoAvailable),
         };
 
         internal static CandyBoxToolEntry Find(string id)

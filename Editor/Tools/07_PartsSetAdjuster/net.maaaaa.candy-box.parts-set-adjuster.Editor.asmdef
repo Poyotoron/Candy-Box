@@ -1,6 +1,6 @@
 {
-    "name": "net.maaaaa.candy-box.hair-set-adjuster.Editor",
-    "rootNamespace": "Poyo.CandyBox.HairSetAdjuster.Editor",
+    "name": "net.maaaaa.candy-box.parts-set-adjuster.Editor",
+    "rootNamespace": "Poyo.CandyBox.PartsSetAdjuster.Editor",
     "references": [
         "net.maaaaa.candy-box.Editor"
     ],

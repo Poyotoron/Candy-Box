@@ -2,9 +2,9 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
-namespace Poyo.CandyBox.HairSetAdjuster.Editor
+namespace Poyo.CandyBox.PartsSetAdjuster.Editor
 {
-    internal static class HairSetAdjusterFit
+    internal static class PartsSetAdjusterFit
     {
         private const float TargetGap = 0.00342f;
         private const float TargetGapUp = 0.00679f;
@@ -66,9 +66,15 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
             internal int Order;
         }
 
-        internal static HairSetFitResult Fit(HairSetTarget target, Quaternion rootRotation, bool fitScale)
+        internal static PartsSetFitResult Fit(PartsSetTarget target, Quaternion rootRotation, bool fitScale)
         {
-            var result = new HairSetFitResult();
+            var result = new PartsSetFitResult();
+            if (target.Kind != PartsSetKind.Hair)
+            {
+                result.FailureReason = "自動で合わせるは、種類が髪のときだけ使えます。";
+                return result;
+            }
+
             try
             {
                 EditorUtility.DisplayProgressBar("Candy Box", ProgressMessage, 0f);
@@ -85,7 +91,7 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
 
                 var points = new List<Vector3>();
                 var triangles = new List<int>();
-                HairSetAdjusterPenetration.CollectHairMesh(target.Hair, points, triangles);
+                PartsSetAdjusterPenetration.CollectPartMesh(target, points, triangles);
                 if (triangles.Count == 0)
                 {
                     result.FailureReason = "髪にメッシュが見つからないため、自動で合わせられません。";
@@ -94,18 +100,18 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
 
                 var context = new FitContext
                 {
-                    Grid = new HairSetTriangleGrid(points.ToArray(), triangles.ToArray()),
+                    Grid = new PartsSetTriangleGrid(points.ToArray(), triangles.ToArray()),
                     Samples = samples,
-                    Center = target.HeadCenter,
+                    Center = target.ReferenceCenter,
                     Up = up,
                     Forward = forward,
                     Right = right,
                     Start = new Candidate { Scale = 1f }
                 };
-                result.FromHeadBone = target.HairHeadBone != null && target.HairHeadBone.IsChildOf(target.AdjustTarget);
+                result.FromHeadBone = target.PartReferenceBone != null && target.PartReferenceBone.IsChildOf(target.AdjustTarget);
                 if (result.FromHeadBone)
                 {
-                    context.Start.Delta = target.HeadBone.position - target.HairHeadBone.position;
+                    context.Start.Delta = target.ReferenceBone.position - target.PartReferenceBone.position;
                 }
                 else
                 {
@@ -129,20 +135,20 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
             }
         }
 
-        private static List<Sample> CollectSamples(HairSetTarget target, Vector3 up, Vector3 forward, Vector3 bias)
+        private static List<Sample> CollectSamples(PartsSetTarget target, Vector3 up, Vector3 forward, Vector3 bias)
         {
             var samples = new List<Sample>();
             var mesh = new Mesh { hideFlags = HideFlags.HideAndDontSave };
             try
             {
-                target.Face.BakeMesh(mesh, true);
+                target.ReferenceMesh.BakeMesh(mesh, true);
                 // NOTE: BakeMesh は拡大を焼き込むため、ワールド化では位置と回転だけを使う。
                 Matrix4x4 matrix = Matrix4x4.TRS(
-                    target.Face.transform.position, target.Face.transform.rotation, Vector3.one);
+                    target.ReferenceMesh.transform.position, target.ReferenceMesh.transform.rotation, Vector3.one);
                 Vector3[] vertices = mesh.vertices;
                 Vector3[] normals = mesh.normals;
                 var isHead = new bool[vertices.Length];
-                foreach (int index in target.HeadVertexIndices)
+                foreach (int index in target.ReferenceVertexIndices)
                 {
                     isHead[index] = true;
                 }
@@ -173,7 +179,7 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
 
                         Vector3 m = (vertices[a] + vertices[b] + vertices[c]) / 3f;
                         Vector3 nn = (normals[a] + normals[b] + normals[c]).normalized;
-                        Vector3 d = m - target.HeadCenter;
+                        Vector3 d = m - target.ReferenceCenter;
                         // NOTE: 耳や内側の面は除くが、うなじの被覆も調べるため頭の下半分と顔を残す。
                         if (Vector3.Dot(nn, d.normalized) < OutwardThreshold)
                         {
@@ -187,7 +193,7 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
                                 Vector3.Distance(vertices[c], vertices[a]))) / SampleSpacing));
                         if (k == 1)
                         {
-                            AddSample(samples, m, nn, target.HeadCenter, up, forward, bias);
+                            AddSample(samples, m, nn, target.ReferenceCenter, up, forward, bias);
                         }
                         else
                         {
@@ -200,7 +206,7 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
                                     AddSample(samples,
                                         vertices[a] + (vertices[b] - vertices[a]) * u + (vertices[c] - vertices[a]) * v,
                                         (normals[a] * (1f - u - v) + normals[b] * u + normals[c] * v).normalized,
-                                        target.HeadCenter, up, forward, bias);
+                                        target.ReferenceCenter, up, forward, bias);
                                 }
                             }
                         }
@@ -251,7 +257,7 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
 
         private sealed class FitContext
         {
-            internal HairSetTriangleGrid Grid;
+            internal PartsSetTriangleGrid Grid;
             internal List<Sample> Samples;
             internal Vector3 Center;
             internal Vector3 Right;

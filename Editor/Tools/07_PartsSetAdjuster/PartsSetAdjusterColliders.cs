@@ -3,9 +3,9 @@ using UnityEditor;
 using UnityEngine;
 using VRC.Dynamics;
 
-namespace Poyo.CandyBox.HairSetAdjuster.Editor
+namespace Poyo.CandyBox.PartsSetAdjuster.Editor
 {
-    internal static class HairSetAdjusterColliders
+    internal static class PartsSetAdjusterColliders
     {
         private const float CenterRadiusRatio = 0.5f;
         private const float MinimumRatio = 0.75f;
@@ -15,7 +15,7 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
         private const string BoneReason = "付いている骨が分かりません";
         private const string ShapeReason = "同じ骨に同じ形の Collider がありません";
         private const string DistanceReason = "位置か大きさが離れています";
-        private const string UndoName = "Hair Set Adjuster Colliders";
+        private const string UndoName = "Parts Set Adjuster Colliders";
 
         private struct WorldShape
         {
@@ -25,9 +25,9 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
             internal float Height;
         }
 
-        internal static HairSetColliderPlan Collect(HairSetTarget target, int poseVersion)
+        internal static PartsSetColliderPlan Collect(PartsSetTarget target, int poseVersion)
         {
-            var plan = new HairSetColliderPlan
+            var plan = new PartsSetColliderPlan
             {
                 PoseVersion = poseVersion
             };
@@ -36,14 +36,14 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
             foreach (VRCPhysBoneColliderBase collider in
                 target.AvatarRoot.GetComponentsInChildren<VRCPhysBoneColliderBase>(true))
             {
-                if (!collider.transform.IsChildOf(target.Hair.transform))
+                if (!collider.transform.IsChildOf(target.Part.transform))
                 {
                     avatarColliders.Add(collider);
                 }
             }
 
             int matches = 0;
-            foreach (VRCPhysBoneBase bone in target.Hair.GetComponentsInChildren<VRCPhysBoneBase>(true))
+            foreach (VRCPhysBoneBase bone in target.Part.GetComponentsInChildren<VRCPhysBoneBase>(true))
             {
                 if (bone.colliders == null)
                 {
@@ -52,7 +52,7 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
 
                 foreach (VRCPhysBoneColliderBase collider in bone.colliders)
                 {
-                    if (collider == null || !collider.transform.IsChildOf(target.Hair.transform) || !seen.Add(collider))
+                    if (collider == null || !collider.transform.IsChildOf(target.Part.transform) || !seen.Add(collider))
                     {
                         continue;
                     }
@@ -61,9 +61,9 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
                     VRCPhysBoneColliderBase candidate = FindCandidate(target, collider, avatarColliders, out reason);
                     string path = AnimationUtility.CalculateTransformPath(
                         collider.transform, target.AvatarRoot.transform);
-                    plan.Rows.Add(new HairSetColliderRow
+                    plan.Rows.Add(new PartsSetColliderRow
                     {
-                        HairCollider = collider,
+                        PartCollider = collider,
                         AvatarCollider = candidate,
                         Selected = candidate != null,
                         Label = candidate != null
@@ -78,11 +78,11 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
                 }
             }
 
-            plan.SummaryLabel = "髪側の Collider " + plan.Rows.Count + " 個 / 候補あり " + matches + " 個";
+            plan.SummaryLabel = "パーツ側の Collider " + plan.Rows.Count + " 個 / 候補あり " + matches + " 個";
             return plan;
         }
 
-        private static string AttachedBone(HairSetTarget target, VRCPhysBoneColliderBase collider)
+        private static string AttachedBone(PartsSetTarget target, VRCPhysBoneColliderBase collider)
         {
             Transform root = collider.rootTransform != null ? collider.rootTransform : collider.transform;
             for (Transform t = root; t != null; t = t.parent)
@@ -105,7 +105,7 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
         {
             Transform root = collider.rootTransform != null ? collider.rootTransform : collider.transform;
             Vector3 lossy = root.lossyScale;
-            // NOTE: 髪の拡大率を反映した世界の半径・高さで、本体との大きさを比較する。
+            // NOTE: パーツの拡大率を反映した世界の半径・高さで、本体との大きさを比較する。
             float scale = Mathf.Max(Mathf.Abs(lossy.x), Mathf.Abs(lossy.y), Mathf.Abs(lossy.z));
             return new WorldShape
             {
@@ -117,7 +117,7 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
         }
 
         private static VRCPhysBoneColliderBase FindCandidate(
-            HairSetTarget target,
+            PartsSetTarget target,
             VRCPhysBoneColliderBase hair,
             List<VRCPhysBoneColliderBase> candidates,
             out string reason)
@@ -197,7 +197,7 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
             return ratio >= MinimumRatio && ratio <= MaximumRatio;
         }
 
-        internal static string Apply(HairSetTarget target, HairSetColliderPlan plan, bool deleteUnused)
+        internal static string Apply(PartsSetTarget target, PartsSetColliderPlan plan, bool deleteUnused)
         {
             Undo.IncrementCurrentGroup();
             Undo.SetCurrentGroupName(UndoName);
@@ -207,19 +207,19 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
             try
             {
                 var mapping = new Dictionary<VRCPhysBoneColliderBase, VRCPhysBoneColliderBase>();
-                foreach (HairSetColliderRow row in plan.Rows)
+                foreach (PartsSetColliderRow row in plan.Rows)
                 {
                     if (row.Selected &&
-                        row.HairCollider != null &&
+                        row.PartCollider != null &&
                         row.AvatarCollider != null &&
-                        row.HairCollider.transform.IsChildOf(target.Hair.transform) &&
-                        !row.AvatarCollider.transform.IsChildOf(target.Hair.transform))
+                        row.PartCollider.transform.IsChildOf(target.Part.transform) &&
+                        !row.AvatarCollider.transform.IsChildOf(target.Part.transform))
                     {
-                        mapping[row.HairCollider] = row.AvatarCollider;
+                        mapping[row.PartCollider] = row.AvatarCollider;
                     }
                 }
 
-                foreach (VRCPhysBoneBase bone in target.Hair.GetComponentsInChildren<VRCPhysBoneBase>(true))
+                foreach (VRCPhysBoneBase bone in target.Part.GetComponentsInChildren<VRCPhysBoneBase>(true))
                 {
                     if (bone.colliders == null)
                     {
@@ -264,7 +264,7 @@ namespace Poyo.CandyBox.HairSetAdjuster.Editor
 
                 if (deleteUnused)
                 {
-                    // NOTE: 髪の外から使われている Collider を消さないため、付け替え後にアバター全体を調べる。
+                    // NOTE: パーツの外から使われている Collider を消さないため、付け替え後にアバター全体を調べる。
                     var used = new HashSet<VRCPhysBoneColliderBase>();
                     foreach (VRCPhysBoneBase bone in target.AvatarRoot.GetComponentsInChildren<VRCPhysBoneBase>(true))
                     {
