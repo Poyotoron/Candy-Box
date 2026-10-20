@@ -61,6 +61,7 @@ nav:
   - 04_Hair Tone Matcher: hair-tone-matcher.md
   - 05_Bone Weight Collapser: bone-weight-collapser.md
   - 06_BlendShape Backuper: blendshape-backuper.md
-  - 07_Hair Set Adjuster: hair-set-adjuster.md
+  - 07_Parts Set Adjuster: parts-set-adjuster.md
+  - 08_FaceEmo Splitter: face-emo-splitter.md
   - 困ったときは: troubleshooting.md
   - 更新履歴: changelog.md
